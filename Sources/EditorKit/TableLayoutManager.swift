@@ -42,8 +42,8 @@ public final class TableLayoutManager: NSLayoutManager {
         let line = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
         let paragraph = storage.attribute(.paragraphStyle, at: character, effectiveRange: nil) as? NSParagraphStyle
         let indent = paragraph?.headIndent ?? 0
-        return NSRect(x: line.minX + container.lineFragmentPadding + indent, y: line.midY - 2,
-                  width: max(0, line.width - 2 * container.lineFragmentPadding - indent), height: 4)
+        return NSRect(x: line.minX + container.lineFragmentPadding + indent, y: line.midY - 1,
+              width: max(0, line.width - 2 * container.lineFragmentPadding - indent), height: 2)
     }
 
     public func checkboxRect(at character: Int) -> NSRect? {

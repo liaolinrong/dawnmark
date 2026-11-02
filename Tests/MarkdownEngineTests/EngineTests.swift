@@ -74,7 +74,7 @@ import EditorKit
                 #expect(abs(rect.width - (container.size.width - 2 * container.lineFragmentPadding)) < 1)
                 let heading = try #require(layout.headingSeparatorRect(at: 0))
                 #expect(heading.height == 1)
-                #expect(rect.height == 4)
+                #expect(rect.height == 2)
                 let before = (editor.string as NSString).range(of: "Before").location
                 let after = (editor.string as NSString).range(of: "After").location
                 let beforeLine = layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: before), effectiveRange: nil)
@@ -84,7 +84,7 @@ import EditorKit
                 let quotedCharacter = (editor.string as NSString).range(of: "\u{FFFC}", options: .backwards).location
                 let quoted = try #require(layout.horizontalRuleRect(at: quotedCharacter))
                 let quotedHeading = try #require(layout.headingSeparatorRect(at: (editor.string as NSString).range(of: "Quoted heading").location))
-                #expect(quoted.height == 4)
+                #expect(quoted.height == 2)
                 #expect(quoted.minX > rect.minX)
                 #expect(abs(quoted.minX - quotedHeading.minX) < 1)
                 #expect(abs(quoted.maxX - quotedHeading.maxX) < 1)
@@ -105,7 +105,7 @@ import EditorKit
                     let headingColor = try #require(bitmap.colorAt(x: Int((heading.minX + heading.width * fraction + editor.textContainerOrigin.x) * scaleX),
                                                                   y: Int((heading.midY + editor.textContainerOrigin.y) * scaleY))?.usingColorSpace(.deviceRGB))
                     #expect(max(abs(color.redComponent - headingColor.redComponent), abs(color.greenComponent - headingColor.greenComponent), abs(color.blueComponent - headingColor.blueComponent)) > 0.02)
-                    for inset in [CGFloat(0.5), 3.5] {
+                    for inset in [CGFloat(0.5), 1.5] {
                         let edge = try #require(bitmap.colorAt(x: horizontal, y: Int((rect.minY + inset + editor.textContainerOrigin.y) * scaleY))?.usingColorSpace(.deviceRGB))
                         #expect(abs(edge.redComponent - color.redComponent) < 0.02)
                     }
@@ -229,7 +229,7 @@ import EditorKit
             #expect(character != NSNotFound)
             let rect = try #require(layout.horizontalRuleRect(at: character))
             #expect(abs(rect.width - (container.size.width - 2 * container.lineFragmentPadding)) < 1)
-            #expect(rect.height == 4)
+            #expect(rect.height == 2)
             #expect(session.source == source)
             editor.setSelectedRange(NSRange(location: character + 1, length: 0))
             editor.deleteBackward(nil)
