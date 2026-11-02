@@ -1,0 +1,77 @@
+name: DawnMark
+options:
+  minimumXcodeGenVersion: 2.42.0
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - zh-Hans
+    - zh-Hant
+    - ja
+    - ko
+    - fr
+    - de
+    - es
+    - pt-BR
+    - pt-PT
+    - it
+    - nl
+    - pl
+    - tr
+    - id
+packages:
+  DawnMarkModules:
+    path: .
+  AppCommerce:
+    path: ../appcommerce
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+targets:
+  DawnMark:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/DawnMark
+      - path: Configuration/DawnMark.storekit
+        buildPhase: none
+      - path: Configuration/AppIcon.icns
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.liaolinrong.DawnMark
+        PRODUCT_NAME: DawnMark
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        INFOPLIST_FILE: Configuration/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Configuration/DawnMark.entitlements
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - sdk: AppKit.framework
+      - sdk: SwiftUI.framework
+      - package: DawnMarkModules
+        product: EditorKit
+      - package: DawnMarkModules
+        product: DocumentWorkspace
+      - package: DawnMarkModules
+        product: DawnMarkSupport
+      - package: AppCommerce
+        product: CommerceCore
+      - package: AppCommerce
+        product: CommerceStoreKit
+schemes:
+  DawnMark:
+    build:
+      targets:
+        DawnMark: all
+    run:
+      config: Debug
+      storeKitConfiguration: Configuration/DawnMark.storekit
+    archive:
+      config: Release

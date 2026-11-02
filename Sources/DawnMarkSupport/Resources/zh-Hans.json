@@ -1,0 +1,18 @@
+{
+  "acknowledge": "知道了",
+  "deleteTable": "删除表格",
+  "listIndentOnly": "%@模式仅支持列表项增加缩进，不支持非列表内容。请切换到%@模式调整缩进。",
+  "languageRestartTitle": "语言已更改",
+  "languageRestartMessage": "DawnMark 的菜单和界面已更新。部分 macOS 菜单和系统面板将在退出并重新打开 DawnMark 后使用所选语言。此更改不会影响其他应用。",
+  "outline":"大纲", "untitledHeading":"无标题",
+  "file":"文件", "edit":"编辑", "format":"格式", "insert":"插入", "view":"显示", "window":"窗口", "help":"帮助", "about":"关于 DawnMark", "settings":"设置…", "purchase":"试用与购买…", "restore":"恢复购买", "quit":"退出 DawnMark",
+  "newDocument":"新建文档…", "open":"打开…", "openRecent":"最近打开", "clearRecent":"清除菜单", "close":"关闭", "save":"保存", "saveAs":"另存为…", "showInFinder":"在 Finder 中显示",
+  "undo":"撤销", "redo":"重做", "cut":"剪切", "copy":"复制", "paste":"粘贴", "selectAll":"全选", "find":"查找…", "replace":"查找与替换…",
+  "headings":"标题", "body":"正文", "heading":"%d 级标题", "inline":"行内格式", "bold":"加粗", "italic":"斜体", "strike":"删除线", "inlineCode":"行内代码", "lists":"列表", "unordered":"无序列表", "ordered":"有序列表", "tasks":"任务列表", "paragraph":"段落", "quote":"引用", "indent":"增加缩进", "outdent":"减少缩进", "clearFormat":"清除格式",
+  "link":"链接…", "image":"图片…", "table":"表格…", "codeBlock":"代码块", "rule":"分隔线", "tableActions":"表格", "addRow":"插入行", "deleteRow":"删除行", "addColumn":"插入列", "deleteColumn":"删除列",
+  "richMode":"可视化编辑", "sourceMode":"Markdown 源码", "minimize":"最小化", "zoom":"缩放", "bringAll":"全部置于前面", "appHelp":"DawnMark 帮助",
+  "untitled":"未命名", "create":"创建", "documentName":"文档名称：", "chooseFolder":"选择目录", "authorizeFolder":"授权文档目录", "folderPermission":"请选择此 Markdown 文件所在的目录，以允许 DawnMark 保存图片。", "errorTitle":"DawnMark", "operationFailed":"无法完成操作，请检查文件访问权限后重试。", "invalidName":"请输入有效的文档名称，不能包含斜线或冒号。", "alreadyExists":"已经存在同名文档目录。", "invalidImage":"此文件不是支持的图片。", "unsafePath":"该资源位于文档目录之外。",
+  "linkAddress":"链接地址：", "cancel":"取消", "confirm":"插入", "columns":"列数", "rows":"行数", "trialStart":"开始 15 天试用", "trialDisclosure":"领取免费试用后，可连续 15 天使用全部功能。试用结束后仍可阅读文档，编辑和新建文档需要一次性买断。试用不会自动扣款或续费。", "priceUnavailable":"暂时无法获取价格", "buy":"一次性购买 · %@", "lifetime":"一次性买断", "checking":"正在检查购买状态…", "notStarted":"尚未开始试用", "trialStatus":"试用截止 %@", "unlocked":"已解锁完整版本", "expired":"试用已结束 · 只读", "pending":"购买正在等待批准", "purchaseFailed":"无法完成购买，请检查 App Store 连接后重试。", "restoreSuccess":"已恢复完整版本", "restoreEmpty":"已检查恢复购买，未找到有效的完整版本权限。",
+  "general":"通用", "appearance":"外观", "system":"跟随系统", "light":"浅色", "dark":"深色", "language":"语言", "english":"英语", "chinese":"简体中文", "spellcheck":"输入时检查拼写", "defaultMode":"默认编辑模式", "version":"版本 %@（%@）", "copyright":"DawnMark · 原生 Markdown 编辑器", "readonly":"只读", "edited":"已修改", "documentStatus":"%@ · %@", "helpContent":"DawnMark 为每篇文档建立独立目录，图片保存在其中的 images 子目录，并使用相对路径引用。整体复制文档目录可以保留文字和图片。通过文件菜单新建或打开文档，通过格式和插入菜单编辑内容，通过显示菜单切换 Markdown 源码与可视化编辑模式。不支持的 Markdown 语法可以在源码模式中编辑。", "unsupportedEdit":"当前选区不支持此操作，可以切换到 Markdown 源码模式编辑。",
+  "saveChanges":"保存", "discard":"放弃修改", "unsavedChanges":"关闭文档前是否保存修改？", "resourceWarning":"部分图片引用位于文档目录之外或无法访问。请先将图片复制到文档目录并更新引用，再建立独立副本。网络图片需要显式下载。", "missingImage":"图片不可用", "collectImages":"收集本地图片", "collected":"本地图片已收集到文档目录。", "imageTooLarge":"图片超过 50 MiB 或一亿像素的限制。", "imageImportCancelled":"插入位置的文字已改变，图片插入已取消。请选择新位置后重新插入。", "retry":"重试"
+}

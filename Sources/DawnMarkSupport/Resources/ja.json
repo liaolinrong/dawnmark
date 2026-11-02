@@ -1,0 +1,18 @@
+{
+  "acknowledge": "了解",
+  "deleteTable": "表を削除",
+  "listIndentOnly": "%@ではリスト項目のみインデントを増やせます。リスト以外の内容は%@に切り替えてインデントを調整してください。",
+  "languageRestartTitle": "言語を変更しました",
+  "languageRestartMessage": "DawnMark のメニューとインターフェイスを更新しました。一部の macOS メニューとシステムパネルは、DawnMark を終了して再度開くと、選択した言語で表示されます。この変更はほかのアプリには影響しません。",
+  "outline":"アウトライン", "untitledHeading":"無題の見出し",
+  "file":"ファイル", "edit":"編集", "format":"フォーマット", "insert":"挿入", "view":"表示", "window":"ウインドウ", "help":"ヘルプ", "about":"DawnMark について", "settings":"設定...", "purchase":"試用と購入...", "restore":"購入を復元", "quit":"DawnMark を終了",
+  "newDocument":"新規書類...", "open":"開く...", "openRecent":"最近使った項目を開く", "clearRecent":"メニューを消去", "close":"閉じる", "save":"保存", "saveAs":"別名で保存...", "showInFinder":"Finder に表示",
+  "undo":"取り消す", "redo":"やり直す", "cut":"カット", "copy":"コピー", "paste":"ペースト", "selectAll":"すべてを選択", "find":"検索...", "replace":"検索と置換...",
+  "headings":"見出し", "body":"本文", "heading":"見出し %d", "inline":"インライン書式", "bold":"太字", "italic":"斜体", "strike":"取り消し線", "inlineCode":"インラインコード", "lists":"リスト", "unordered":"箇条書きリスト", "ordered":"番号付きリスト", "tasks":"タスクリスト", "paragraph":"段落", "quote":"引用ブロック", "indent":"インデントを増やす", "outdent":"インデントを減らす", "clearFormat":"書式をクリア",
+  "link":"リンク...", "image":"画像...", "table":"表...", "codeBlock":"コードブロック", "rule":"水平線", "tableActions":"表", "addRow":"行を挿入", "deleteRow":"行を削除", "addColumn":"列を挿入", "deleteColumn":"列を削除",
+  "richMode":"見たまま編集", "sourceMode":"Markdown ソース", "minimize":"しまう", "zoom":"拡大／縮小", "bringAll":"すべてを手前に移動", "appHelp":"DawnMark ヘルプ",
+  "untitled":"名称未設定", "create":"作成", "documentName":"書類名：", "chooseFolder":"フォルダを選択", "authorizeFolder":"書類フォルダへのアクセスを許可", "folderPermission":"DawnMark が画像を保存できるように、この Markdown ファイルがあるフォルダを選択してください。", "errorTitle":"DawnMark", "operationFailed":"操作を完了できませんでした。ファイルのアクセス権を確認して、もう一度お試しください。", "invalidName":"スラッシュやコロンを含まない、有効な書類名を入力してください。", "alreadyExists":"同じ名前の書類フォルダがすでに存在します。", "invalidImage":"このファイルの画像形式には対応していません。", "unsafePath":"このリソースは書類フォルダの外にあります。",
+  "linkAddress":"リンク先のアドレス：", "cancel":"キャンセル", "confirm":"挿入", "columns":"列数", "rows":"行数", "trialStart":"15 日間の無料試用を開始", "trialDisclosure":"無料試用を開始すると、すべての機能を連続 15 日間お試しいただけます。試用終了後も書類の閲覧は可能ですが、編集や新規作成には買い切りでの購入が必要です。試用による自動課金や自動更新はありません。", "priceUnavailable":"価格を取得できません", "buy":"買い切りで購入 · %@", "lifetime":"買い切り購入", "checking":"購入状況を確認中...", "notStarted":"試用はまだ開始されていません", "trialStatus":"試用終了日：%@", "unlocked":"製品版が有効になりました", "expired":"試用終了 · 読み出し専用", "pending":"購入の承認待ち", "purchaseFailed":"購入を完了できませんでした。App Store への接続を確認して、もう一度お試しください。", "restoreSuccess":"すべての機能へのアクセスを復元しました", "restoreEmpty":"復元した購入を確認しましたが、すべての機能を利用できる有効な購入は見つかりませんでした。",
+  "general":"一般", "appearance":"外観", "system":"システムに合わせる", "light":"ライト", "dark":"ダーク", "language":"言語", "english":"英語", "chinese":"簡体字中国語", "spellcheck":"入力中にスペルをチェック", "defaultMode":"デフォルトの編集モード", "version":"バージョン %@ (%@)", "copyright":"DawnMark · ネイティブ Markdown エディタ", "readonly":"読み出し専用", "edited":"編集済み", "documentStatus":"%@ · %@", "helpContent":"DawnMark は書類ごとに専用のフォルダを作成して保存します。画像は images サブフォルダに保存され、相対パスで参照されます。書類フォルダ全体をコピーすると、テキストと画像をまとめて保持できます。「ファイル」メニューで書類を作成または開き、「フォーマット」と「挿入」メニューで内容を編集します。「表示」メニューでソース編集と見たまま編集を切り替えられます。未対応の Markdown 構文はソースモードで編集できます。", "unsupportedEdit":"現在の選択範囲ではこの操作を実行できません。Markdown ソースで編集してください。",
+  "saveChanges":"保存", "discard":"変更を破棄", "unsavedChanges":"この書類を閉じる前に変更を保存しますか？", "resourceWarning":"一部の画像の参照先が書類フォルダの外にあるか、利用できません。独立したコピーを作成する前に、画像を書類フォルダにコピーして参照先を更新してください。リモート画像は手動でダウンロードする必要があります。", "missingImage":"画像を表示できません", "collectImages":"ローカル画像をまとめる", "collected":"ローカル画像を書類フォルダにまとめました。", "imageTooLarge":"画像がファイルサイズ 50 MiB または 1 億画素の上限を超えています。", "imageImportCancelled":"挿入先のテキストが変更されたため、画像の挿入をキャンセルしました。別の位置を選択して、もう一度挿入してください。", "retry":"再試行"
+}

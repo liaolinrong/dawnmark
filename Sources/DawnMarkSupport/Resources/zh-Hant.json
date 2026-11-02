@@ -1,0 +1,18 @@
+{
+  "acknowledge": "知道了",
+  "deleteTable": "刪除表格",
+  "listIndentOnly": "%@模式僅支援增加清單項目的縮排，不支援非清單內容。請切換至%@模式調整縮排。",
+  "languageRestartTitle": "語言已更改",
+  "languageRestartMessage": "DawnMark 的選單和介面已更新。部分 macOS 選單和系統面板會在結束並重新打開 DawnMark 後使用所選語言。此更改不會影響其他 App。",
+  "outline":"大綱", "untitledHeading":"無標題",
+  "file":"檔案", "edit":"編輯", "format":"格式", "insert":"插入", "view":"顯示方式", "window":"視窗", "help":"輔助說明", "about":"關於 DawnMark", "settings":"設定...", "purchase":"試用與購買...", "restore":"回復購買項目", "quit":"結束 DawnMark",
+  "newDocument":"新增文件...", "open":"打開...", "openRecent":"打開最近使用的檔案", "clearRecent":"清除選單", "close":"關閉", "save":"儲存", "saveAs":"另存新檔...", "showInFinder":"在 Finder 中顯示",
+  "undo":"還原", "redo":"重做", "cut":"剪下", "copy":"拷貝", "paste":"貼上", "selectAll":"全選", "find":"尋找...", "replace":"尋找與取代...",
+  "headings":"標題", "body":"內文", "heading":"標題 %d", "inline":"行內格式", "bold":"粗體", "italic":"斜體", "strike":"刪除線", "inlineCode":"行內程式碼", "lists":"列表", "unordered":"項目符號列表", "ordered":"編號列表", "tasks":"工作列表", "paragraph":"段落", "quote":"引文區塊", "indent":"增加縮排", "outdent":"減少縮排", "clearFormat":"清除格式",
+  "link":"連結...", "image":"圖片...", "table":"表格...", "codeBlock":"程式碼區塊", "rule":"水平分隔線", "tableActions":"表格", "addRow":"插入列", "deleteRow":"刪除列", "addColumn":"插入欄", "deleteColumn":"刪除欄",
+  "richMode":"視覺化編輯", "sourceMode":"Markdown 原始碼", "minimize":"縮小", "zoom":"縮放", "bringAll":"將所有視窗移至最前方", "appHelp":"DawnMark 輔助說明",
+  "untitled":"未命名", "create":"建立", "documentName":"文件名稱：", "chooseFolder":"選擇檔案夾", "authorizeFolder":"授權存取文件檔案夾", "folderPermission":"請選擇包含此 Markdown 檔案的檔案夾，讓 DawnMark 能夠儲存文件中的圖片。", "errorTitle":"DawnMark", "operationFailed":"無法完成操作。請檢查檔案權限後再試一次。", "invalidName":"請輸入有效的文件名稱，不可包含斜線或冒號。", "alreadyExists":"已有同名的文件檔案夾。", "invalidImage":"不支援此檔案的圖片格式。", "unsafePath":"此資源位於文件檔案夾之外。",
+  "linkAddress":"連結網址：", "cancel":"取消", "confirm":"插入", "columns":"欄數", "rows":"列數", "trialStart":"開始 15 天試用", "trialDisclosure":"領取免費試用後，即可連續 15 天使用所有功能。試用結束後，仍可閱讀文件；編輯及建立文件則需一次性購買。試用不會自動收費或續期。", "priceUnavailable":"無法取得價格", "buy":"一次性購買 · %@", "lifetime":"一次性購買", "checking":"正在檢查購買狀態...", "notStarted":"尚未開始試用", "trialStatus":"試用將於 %@ 結束", "unlocked":"已解鎖完整版本", "expired":"試用已結束 · 唯讀", "pending":"購買正在等候核准", "purchaseFailed":"無法完成購買。請檢查 App Store 連線後再試一次。", "restoreSuccess":"已回復完整使用權限", "restoreEmpty":"已檢查回復的購買項目，未找到有效的完整使用權限。",
+  "general":"一般", "appearance":"外觀", "system":"跟隨系統", "light":"淺色", "dark":"深色", "language":"語言", "english":"英文", "chinese":"簡體中文", "spellcheck":"輸入時檢查拼字", "defaultMode":"預設編輯模式", "version":"版本 %@ (%@)", "copyright":"DawnMark · 原生 Markdown 編輯器", "readonly":"唯讀", "edited":"已編輯", "documentStatus":"%@ · %@", "helpContent":"DawnMark 會將每份文件儲存在獨立的檔案夾中。圖片儲存在 images 子檔案夾，並以相對路徑參照。拷貝整個文件檔案夾，即可將文字與圖片一併保留。使用「檔案」選單建立或打開文件，使用「格式」和「插入」選單編輯內容，並在「顯示方式」選單切換 Markdown 原始碼與視覺化編輯模式。不支援的 Markdown 語法可在原始碼模式中編輯。", "unsupportedEdit":"目前選取的內容不適用此操作。您可以改為編輯 Markdown 原始碼。",
+  "saveChanges":"儲存", "discard":"捨棄更動", "unsavedChanges":"關閉此文件前要儲存更動嗎？", "resourceWarning":"部分圖片參照位於文件檔案夾之外，或無法使用。建立獨立副本前，請先將圖片拷貝至文件檔案夾，並更新其參照路徑。遠端圖片必須手動下載。", "missingImage":"無法取得圖片", "collectImages":"收集本機圖片", "collected":"已將本機圖片收集至文件檔案夾。", "imageTooLarge":"圖片超過 50 MiB 的檔案大小限制或 1 億像素的限制。", "imageImportCancelled":"由於插入位置的文字已變更，已取消插入圖片。請選擇新的位置後再次插入。", "retry":"重試"
+}

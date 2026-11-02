@@ -1,0 +1,189 @@
+{
+  "identifier" : "2A594493-7D97-486A-B737-C2DE7B41AB64",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "0.00",
+      "familyShareable" : false,
+      "internalID" : "A831F2D1",
+      "localizations" : [
+        {
+          "description" : "Try DawnMark for 15 days.",
+          "displayName" : "15-day Trial",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "免费试用 DawnMark 15 天。",
+          "displayName" : "15 天试用",
+          "locale" : "zh_Hans"
+        },
+        {
+          "description" : "免費試用 DawnMark 15 天。",
+          "displayName" : "15 天試用",
+          "locale" : "zh_Hant"
+        },
+        {
+          "description" : "DawnMark を 15 日間無料でお試しください。",
+          "displayName" : "15 日間の試用",
+          "locale" : "ja_JP"
+        },
+        {
+          "description" : "DawnMark를 15일 동안 무료로 체험해 보세요.",
+          "displayName" : "15일 체험",
+          "locale" : "ko_KR"
+        },
+        {
+          "description" : "Essayez DawnMark gratuitement pendant 15 jours.",
+          "displayName" : "Essai de 15 jours",
+          "locale" : "fr_FR"
+        },
+        {
+          "description" : "Teste DawnMark 15 Tage lang kostenlos.",
+          "displayName" : "15 Tage testen",
+          "locale" : "de_DE"
+        },
+        {
+          "description" : "Prueba DawnMark gratis durante 15 días.",
+          "displayName" : "Prueba de 15 días",
+          "locale" : "es_ES"
+        },
+        {
+          "description" : "Experimente o DawnMark gratuitamente por 15 dias.",
+          "displayName" : "Teste de 15 dias",
+          "locale" : "pt_BR"
+        },
+        {
+          "description" : "Experimente o DawnMark gratuitamente durante 15 dias.",
+          "displayName" : "Avaliação de 15 dias",
+          "locale" : "pt_PT"
+        },
+        {
+          "description" : "Prova DawnMark gratuitamente per 15 giorni.",
+          "displayName" : "Prova di 15 giorni",
+          "locale" : "it_IT"
+        },
+        {
+          "description" : "Probeer DawnMark 15 dagen gratis.",
+          "displayName" : "Proefperiode van 15 dagen",
+          "locale" : "nl_NL"
+        },
+        {
+          "description" : "Wypróbuj DawnMark bezpłatnie przez 15 dni.",
+          "displayName" : "15-dniowy okres próbny",
+          "locale" : "pl_PL"
+        },
+        {
+          "description" : "DawnMark’ı 15 gün boyunca ücretsiz deneyin.",
+          "displayName" : "15 günlük deneme",
+          "locale" : "tr_TR"
+        },
+        {
+          "description" : "Coba DawnMark gratis selama 15 hari.",
+          "displayName" : "Uji coba 15 hari",
+          "locale" : "id_ID"
+        }
+      ],
+      "productID" : "com.liaolinrong.DawnMark.trial15days",
+      "referenceName" : "15-day Trial",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "10.00",
+      "familyShareable" : false,
+      "internalID" : "F452F8C3",
+      "localizations" : [
+        {
+          "description" : "Unlock DawnMark permanently with a one-time purchase.",
+          "displayName" : "Lifetime Access",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "一次购买，永久解锁 DawnMark。",
+          "displayName" : "永久使用",
+          "locale" : "zh_Hans"
+        },
+        {
+          "description" : "一次購買，永久解鎖 DawnMark。",
+          "displayName" : "永久使用",
+          "locale" : "zh_Hant"
+        },
+        {
+          "description" : "一度の購入で DawnMark を無期限に利用できます。",
+          "displayName" : "無期限の利用権",
+          "locale" : "ja_JP"
+        },
+        {
+          "description" : "한 번 구매하면 DawnMark를 평생 이용할 수 있습니다.",
+          "displayName" : "평생 이용 권한",
+          "locale" : "ko_KR"
+        },
+        {
+          "description" : "Débloquez DawnMark définitivement avec un achat unique.",
+          "displayName" : "Accès à vie",
+          "locale" : "fr_FR"
+        },
+        {
+          "description" : "Schalte DawnMark mit einem einmaligen Kauf dauerhaft frei.",
+          "displayName" : "Dauerhafter Zugriff",
+          "locale" : "de_DE"
+        },
+        {
+          "description" : "Desbloquea DawnMark para siempre con una sola compra.",
+          "displayName" : "Acceso de por vida",
+          "locale" : "es_ES"
+        },
+        {
+          "description" : "Desbloqueie o DawnMark para sempre com uma única compra.",
+          "displayName" : "Acesso vitalício",
+          "locale" : "pt_BR"
+        },
+        {
+          "description" : "Desbloqueie o DawnMark permanentemente com uma compra única.",
+          "displayName" : "Acesso vitalício",
+          "locale" : "pt_PT"
+        },
+        {
+          "description" : "Sblocca DawnMark per sempre con un unico acquisto.",
+          "displayName" : "Accesso a vita",
+          "locale" : "it_IT"
+        },
+        {
+          "description" : "Ontgrendel DawnMark permanent met een eenmalige aankoop.",
+          "displayName" : "Levenslange toegang",
+          "locale" : "nl_NL"
+        },
+        {
+          "description" : "Odblokuj DawnMark na zawsze dzięki jednorazowemu zakupowi.",
+          "displayName" : "Dożywotni dostęp",
+          "locale" : "pl_PL"
+        },
+        {
+          "description" : "Tek seferlik satın almayla DawnMark’ın kilidini kalıcı olarak açın.",
+          "displayName" : "Ömür boyu erişim",
+          "locale" : "tr_TR"
+        },
+        {
+          "description" : "Buka akses DawnMark selamanya dengan satu kali pembelian.",
+          "displayName" : "Akses seumur hidup",
+          "locale" : "id_ID"
+        }
+      ],
+      "productID" : "com.liaolinrong.DawnMark.lifetime",
+      "referenceName" : "Lifetime Access",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

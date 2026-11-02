@@ -1,0 +1,439 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1082DCA1178A95A5833539A5 /* CommerceStoreKit in Frameworks */ = {isa = PBXBuildFile; productRef = E3CF21DDB04F3120FD9FE0C6 /* CommerceStoreKit */; };
+		1B449E3594F149DDBB4BD742 /* DocumentWorkspace in Frameworks */ = {isa = PBXBuildFile; productRef = E5DA57B5D13F8DD208A0C347 /* DocumentWorkspace */; };
+		45218F1979618E15024DBE03 /* AuxiliaryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD2DDDB10A0DAA26C8C02F7 /* AuxiliaryViews.swift */; };
+		50EF22822F1298EE143F4FC9 /* CommerceCore in Frameworks */ = {isa = PBXBuildFile; productRef = E7B9A816A92890C8EF19313E /* CommerceCore */; };
+		7B4D5097D2F468230AA0F9E8 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DD72050B3361464A5F0F478 /* AppDelegate.swift */; };
+		841BF758BE4FDE4D67DD7DA8 /* EditorKit in Frameworks */ = {isa = PBXBuildFile; productRef = 68D1F8C49F67AC5C4C65B87D /* EditorKit */; };
+		86F02D7912C977B8C6B7CAE4 /* DawnMarkSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 1DC4C299A2637D937D04D067 /* DawnMarkSupport */; };
+		9DD38AA7AC1763B6534B03A1 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 978E247C765B6DE7F157F950 /* AppIcon.icns */; };
+		9FEE9EAF40C47B42F81E12D7 /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2755B158AB4CE394B6354DB5 /* MarkdownDocument.swift */; };
+		A6DE88213E313DB5ECB47EFB /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 071A2FD7C70E680889A509F3 /* SwiftUI.framework */; };
+		B4FD383B8404F1755D1EA090 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89C5715167D075D1CDC675CF /* AppKit.framework */; };
+		D906612761C65E0A5157BFC1 /* AppMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785885EFC3F3135DC34822F0 /* AppMenus.swift */; };
+		DBDD9CA5CEBD19D1F9CBB6AC /* AppSmokeCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D218D552565C348E5A6528 /* AppSmokeCheck.swift */; };
+		DD714FC524902E79CFB25E90 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43567BB94E630920328AC600 /* main.swift */; };
+		EC1F58830AF662BC9FB6A135 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFED7384E43B33AB5D7A29FD /* AppCommands.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		071A2FD7C70E680889A509F3 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		23E4A60ABB80FC3FBA709CA8 /* DawnMark.storekit */ = {isa = PBXFileReference; path = DawnMark.storekit; sourceTree = "<group>"; };
+		2755B158AB4CE394B6354DB5 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
+		40FB43561D3B8BEF3C813E1A /* appcommerce */ = {isa = PBXFileReference; lastKnownFileType = folder; name = appcommerce; path = ../appcommerce; sourceTree = SOURCE_ROOT; };
+		43567BB94E630920328AC600 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		4C1BC4525F99A5CD0E0D4A95 /* DawnMark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DawnMark.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		70D218D552565C348E5A6528 /* AppSmokeCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSmokeCheck.swift; sourceTree = "<group>"; };
+		785885EFC3F3135DC34822F0 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMenus.swift; sourceTree = "<group>"; };
+		7DD2DDDB10A0DAA26C8C02F7 /* AuxiliaryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuxiliaryViews.swift; sourceTree = "<group>"; };
+		89C5715167D075D1CDC675CF /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		978E247C765B6DE7F157F950 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		9DD72050B3361464A5F0F478 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		BFED7384E43B33AB5D7A29FD /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
+		D96B11E3900CD21FA32973AE /* dawnmark */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dawnmark; path = .; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6D59FECAB9FA95D676320198 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4FD383B8404F1755D1EA090 /* AppKit.framework in Frameworks */,
+				A6DE88213E313DB5ECB47EFB /* SwiftUI.framework in Frameworks */,
+				841BF758BE4FDE4D67DD7DA8 /* EditorKit in Frameworks */,
+				1B449E3594F149DDBB4BD742 /* DocumentWorkspace in Frameworks */,
+				86F02D7912C977B8C6B7CAE4 /* DawnMarkSupport in Frameworks */,
+				50EF22822F1298EE143F4FC9 /* CommerceCore in Frameworks */,
+				1082DCA1178A95A5833539A5 /* CommerceStoreKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5721B8704ABCDE250E70F187 = {
+			isa = PBXGroup;
+			children = (
+				E371AD03E2457481EE8829E2 /* Configuration */,
+				6E23641326D819C37D3C3ECB /* DawnMark */,
+				D3EE2093938BF2248E44D931 /* Packages */,
+				6D086B134D943A2D17D4089D /* Frameworks */,
+				E909A7E1173DF0D53A034104 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6D086B134D943A2D17D4089D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				89C5715167D075D1CDC675CF /* AppKit.framework */,
+				071A2FD7C70E680889A509F3 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6E23641326D819C37D3C3ECB /* DawnMark */ = {
+			isa = PBXGroup;
+			children = (
+				BFED7384E43B33AB5D7A29FD /* AppCommands.swift */,
+				9DD72050B3361464A5F0F478 /* AppDelegate.swift */,
+				785885EFC3F3135DC34822F0 /* AppMenus.swift */,
+				70D218D552565C348E5A6528 /* AppSmokeCheck.swift */,
+				7DD2DDDB10A0DAA26C8C02F7 /* AuxiliaryViews.swift */,
+				43567BB94E630920328AC600 /* main.swift */,
+				2755B158AB4CE394B6354DB5 /* MarkdownDocument.swift */,
+			);
+			name = DawnMark;
+			path = Sources/DawnMark;
+			sourceTree = "<group>";
+		};
+		D3EE2093938BF2248E44D931 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				40FB43561D3B8BEF3C813E1A /* appcommerce */,
+				D96B11E3900CD21FA32973AE /* dawnmark */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		E371AD03E2457481EE8829E2 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				978E247C765B6DE7F157F950 /* AppIcon.icns */,
+				23E4A60ABB80FC3FBA709CA8 /* DawnMark.storekit */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		E909A7E1173DF0D53A034104 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4C1BC4525F99A5CD0E0D4A95 /* DawnMark.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5B9F415801C5BA5B9684CB7C /* DawnMark */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F77ACB4912EB0DA280E8469F /* Build configuration list for PBXNativeTarget "DawnMark" */;
+			buildPhases = (
+				22C48A81A8DF307BB52F0516 /* Sources */,
+				E9FEDC476934983C75C8729D /* Resources */,
+				6D59FECAB9FA95D676320198 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DawnMark;
+			packageProductDependencies = (
+				68D1F8C49F67AC5C4C65B87D /* EditorKit */,
+				E5DA57B5D13F8DD208A0C347 /* DocumentWorkspace */,
+				1DC4C299A2637D937D04D067 /* DawnMarkSupport */,
+				E7B9A816A92890C8EF19313E /* CommerceCore */,
+				E3CF21DDB04F3120FD9FE0C6 /* CommerceStoreKit */,
+			);
+			productName = DawnMark;
+			productReference = 4C1BC4525F99A5CD0E0D4A95 /* DawnMark.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A07FD982D4AC3F41204B4A26 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5B9F415801C5BA5B9684CB7C = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 78DFBCB1D4257C11B37D81B7 /* Build configuration list for PBXProject "DawnMark" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5721B8704ABCDE250E70F187;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D0C8B2A9D89762A80DAB4FAB /* XCLocalSwiftPackageReference "../appcommerce" */,
+				39A50DF3504892ADD719EAD0 /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E909A7E1173DF0D53A034104 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5B9F415801C5BA5B9684CB7C /* DawnMark */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E9FEDC476934983C75C8729D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9DD38AA7AC1763B6534B03A1 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		22C48A81A8DF307BB52F0516 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EC1F58830AF662BC9FB6A135 /* AppCommands.swift in Sources */,
+				7B4D5097D2F468230AA0F9E8 /* AppDelegate.swift in Sources */,
+				D906612761C65E0A5157BFC1 /* AppMenus.swift in Sources */,
+				DBDD9CA5CEBD19D1F9CBB6AC /* AppSmokeCheck.swift in Sources */,
+				45218F1979618E15024DBE03 /* AuxiliaryViews.swift in Sources */,
+				9FEE9EAF40C47B42F81E12D7 /* MarkdownDocument.swift in Sources */,
+				DD714FC524902E79CFB25E90 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		5016832F8A09670C173E0CB7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		79B44B236B2B03E392E8D286 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Configuration/DawnMark.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Configuration/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liaolinrong.DawnMark;
+				PRODUCT_NAME = DawnMark;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		BF6463812C71FFCEC85DC606 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		CF3AED8B3EA83E0C25A69000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Configuration/DawnMark.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Configuration/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liaolinrong.DawnMark;
+				PRODUCT_NAME = DawnMark;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		78DFBCB1D4257C11B37D81B7 /* Build configuration list for PBXProject "DawnMark" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BF6463812C71FFCEC85DC606 /* Debug */,
+				5016832F8A09670C173E0CB7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F77ACB4912EB0DA280E8469F /* Build configuration list for PBXNativeTarget "DawnMark" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF3AED8B3EA83E0C25A69000 /* Debug */,
+				79B44B236B2B03E392E8D286 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		39A50DF3504892ADD719EAD0 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+		D0C8B2A9D89762A80DAB4FAB /* XCLocalSwiftPackageReference "../appcommerce" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../appcommerce;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1DC4C299A2637D937D04D067 /* DawnMarkSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DawnMarkSupport;
+		};
+		68D1F8C49F67AC5C4C65B87D /* EditorKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EditorKit;
+		};
+		E3CF21DDB04F3120FD9FE0C6 /* CommerceStoreKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CommerceStoreKit;
+		};
+		E5DA57B5D13F8DD208A0C347 /* DocumentWorkspace */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DocumentWorkspace;
+		};
+		E7B9A816A92890C8EF19313E /* CommerceCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CommerceCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A07FD982D4AC3F41204B4A26 /* Project object */;
+}
