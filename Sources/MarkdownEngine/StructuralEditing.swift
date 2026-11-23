@@ -68,8 +68,13 @@ extension DocumentSession {
         return apply([SourcePatch(range: marker, replacement: replacement)], selectionAfter: selectedSourceRange)
     }
 
-    func editTable(_ command: FormattingCommand, selection: NSRange, checkingOnly: Bool = false) -> Bool {
-        guard canEdit, Range(selection, in: source) != nil else { return false }
+    public func tableRange(in selection: NSRange) -> NSRange? {
+        guard let table = tableContaining(selection) else { return nil }
+        return SourceCoordinates(source: source).nsRange(table.range)
+    }
+
+    private func tableContaining(_ selection: NSRange) -> Table? {
+        guard Range(selection, in: source) != nil else { return nil }
         let coordinates = SourceCoordinates(source: source)
         var target: Table?
         func visit(_ node: Markup) {
@@ -80,7 +85,12 @@ extension DocumentSession {
             for child in node.children { visit(child) }
         }
         visit(MarkdownParser.parse(source))
-        guard let table = target, let headRange = coordinates.nsRange(table.head.range) else { return false }
+        return target
+    }
+
+    func editTable(_ command: FormattingCommand, selection: NSRange, checkingOnly: Bool = false) -> Bool {
+        let coordinates = SourceCoordinates(source: source)
+        guard canEdit, let table = tableContaining(selection), let headRange = coordinates.nsRange(table.head.range) else { return false }
         let original = source as NSString
         if case .tableDelete = command {
             guard let range = coordinates.nsRange(table.range) else { return false }
@@ -108,29 +118,41 @@ extension DocumentSession {
         let column = row.cells.firstIndex(where: { selection.location <= NSMaxRange($0) }) ?? min(row.cells.count, head.cells.count) - 1
         guard column < head.cells.count else { return false }
         switch command {
-        case .tableInsertRow:
+        case .tableInsertRow, .tableInsertRowAbove:
+            let above: Bool
+            if case .tableInsertRowAbove = command { above = true } else { above = false }
+            guard !above || rowIndex >= 2 else { return false }
             guard table.body.childCount < 1000 else { return false }
             if checkingOnly { return true }
             let anchor = rows[max(1, rowIndex)]
             let newline = anchor.newline.isEmpty ? head.newline : anchor.newline
             let prefix = original.substring(with: NSRange(location: anchor.line.location, length: anchor.content.location - anchor.line.location))
             let value = prefix + "|" + String(repeating: "   |", count: head.cells.count)
-            let replacement = anchor.newline.isEmpty ? newline + value : value + newline
-            let insertion = NSMaxRange(anchor.line)
-            let caret = insertion + (anchor.newline.isEmpty ? newline.utf16.count : 0) + prefix.utf16.count + 1
+            let replacement = !above && anchor.newline.isEmpty ? newline + value : value + newline
+            let insertion = above ? anchor.line.location : NSMaxRange(anchor.line)
+            let caret = insertion + (!above && anchor.newline.isEmpty ? newline.utf16.count : 0) + prefix.utf16.count + 1
             return apply([SourcePatch(range: NSRange(location: insertion, length: 0), replacement: replacement)], selectionAfter: NSRange(location: caret, length: 0))
         case .tableDeleteRow:
             guard rowIndex >= 2 else { return false }
             if checkingOnly { return true }
             return apply([SourcePatch(range: row.line, replacement: "")], selectionAfter: NSRange(location: rows[rowIndex - 1].cells[0].location, length: 0))
-        case .tableInsertColumn:
+        case .tableInsertColumn, .tableInsertColumnBefore:
             guard head.cells.count < 64 else { return false }
             if checkingOnly { return true }
-            return apply(rows.enumerated().map { index, row in
+            let before: Bool
+            if case .tableInsertColumnBefore = command { before = true } else { before = false }
+            let patches = rows.enumerated().map { index, row in
+                if before, column < row.cells.count {
+                    return SourcePatch(range: NSRange(location: row.cells[column].location, length: 0), replacement: index == 1 ? " --- |" : "   |")
+                }
                 let existingColumn = min(column, row.cells.count - 1)
-                let count = column - existingColumn + 1
+                let count = column - existingColumn + (before ? 0 : 1)
                 return SourcePatch(range: NSRange(location: NSMaxRange(row.cells[existingColumn]), length: 0), replacement: String(repeating: index == 1 ? "| --- " : "|   ", count: count))
-            })
+            }
+            let caretRow = rowIndex == 1 ? 0 : rowIndex
+            let precedingChange = patches.prefix(caretRow).reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
+            let caret = patches[caretRow].range.location + precedingChange + (before ? 0 : 1)
+            return apply(patches, selectionAfter: NSRange(location: caret, length: 0))
         case .tableDeleteColumn:
             guard head.cells.count > 1 else { return false }
             if checkingOnly { return true }

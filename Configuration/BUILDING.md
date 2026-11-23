@@ -8,14 +8,45 @@ From the DawnMark package directory:
 
 ```sh
 ./Scripts/generate-project.sh
-xcodebuild -project DawnMark.xcodeproj -scheme DawnMark -configuration Debug -derivedDataPath build/Xcode CODE_SIGNING_ALLOWED=NO build
 ./Scripts/build-app.sh
 ```
 
-The SwiftPM script assembles `build/DawnMark.app`, including SwiftPM resource
-bundles. This is an unsigned, non-sandbox-signed local app, not a distribution
-artifact. Use the Xcode target, a development team, and appropriate signing for
-sandbox testing and distribution. No app is launched by either script.
+The build script requires full Xcode and XcodeGen. It regenerates the Xcode
+project and builds an ad-hoc signed, sandbox-enabled Release app in
+`.build/local-app`. It verifies the signature and the sandbox, user-selected
+read/write, and app-scoped bookmark entitlements before replacing
+`build/DawnMark.app`. It refuses to run or replace the output while DawnMark is
+running. No old bundle is retained and no app is launched by either script.
+This is a local testing artifact, not an App Store distribution build. Use a
+development team and appropriate distribution signing for submission.
+
+## App Sandbox and File Access
+
+Both Xcode build configurations enable App Sandbox and user-selected read/write
+access. `DawnMark.entitlements` also enables app-scoped bookmarks. File and
+directory grants are saved separately in the app's preferences; opening a file
+does not grant access to its siblings. Documents with local images request the
+document directory when necessary, using the existing localized permission panel.
+Access is restored before reading the document and retained until it closes.
+Stale bookmarks are refreshed while their security scope is active. Restored
+directory bookmarks also locate documents and relative images after a move.
+
+For a local ad-hoc signed build without a developer certificate:
+
+```sh
+xcodebuild -project DawnMark.xcodeproj -scheme DawnMark -configuration Debug -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/sandbox-check CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
+codesign --verify --deep --strict .build/sandbox-check/Build/Products/Debug/DawnMark.app
+codesign -d --entitlements - .build/sandbox-check/Build/Products/Debug/DawnMark.app
+```
+
+Use the matching architecture on Intel Macs. Ad-hoc signing is not App Store
+distribution signing. For the release acceptance check, use a development-team
+signed build and a temporary directory outside the app container: open a Markdown
+file, grant its directory, load and import a relative image, save, close, quit,
+and reopen from Recent Documents. Repeat after moving the directory, and verify
+that cancelling directory authorization does not expose sibling files. Unit tests
+exercise bookmark persistence and recovery but do not emulate sandbox enforcement
+or the system permission panel.
 
 ## App Icon
 
@@ -96,8 +127,9 @@ scheme's local StoreKit configuration.
 ## 本地构建与购买限制
 
 Xcode 工程仅编译 Sources/DawnMark，通过本地 Swift Package 链接其余模块。
-build-app.sh 生成的 build/DawnMark.app 包含资源，但未签名，也未通过签名启用沙盒；
-正式发布与沙盒验证应使用 Xcode 工程配置开发团队和签名。
+build-app.sh 通过 Xcode 生成 Release 本机临时签名沙盒包，验证权限后输出到
+build/DawnMark.app；脚本需要完整 Xcode 和 XcodeGen，运行前须退出所有 DawnMark 实例。
+正式发布仍应在 Xcode 工程配置开发团队和发布签名。
 
 DawnMark scheme 的 StoreKit 配置仅用于 Xcode 本地测试：15 天免费试用是
 non-consumable 测试商品，试用期限由应用业务规则执行；永久版为一次性购买，

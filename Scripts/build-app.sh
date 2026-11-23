@@ -4,18 +4,49 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 package_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
-swift build -c release --package-path "$package_root"
-binary_dir=$(swift build -c release --package-path "$package_root" --show-bin-path)
 app_path="$package_root/build/DawnMark.app"
-mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
-cp "$binary_dir/DawnMark" "$app_path/Contents/MacOS/DawnMark"
-cp "$package_root/Configuration/Info.plist" "$app_path/Contents/Info.plist"
-cp "$package_root/Configuration/AppIcon.icns" "$app_path/Contents/Resources/AppIcon.icns"
-for resource_bundle in "$binary_dir"/*.bundle; do
-    [ -d "$resource_bundle" ] || continue
-    ditto "$resource_bundle" "$app_path/Contents/Resources/$(basename -- "$resource_bundle")"
+derived_data="$package_root/.build/local-app"
+built_app="$derived_data/Build/Products/Release/DawnMark.app"
+
+ensure_not_running() {
+    if pgrep -f '[D]awnMark.app/Contents/MacOS/DawnMark' >/dev/null; then
+        printf '%s\n' 'Quit all DawnMark instances before rebuilding the app.' >&2
+        exit 1
+    fi
+}
+
+ensure_not_running
+"$script_dir/generate-project.sh"
+xcodebuild \
+    -project "$package_root/DawnMark.xcodeproj" \
+    -scheme DawnMark \
+    -configuration Release \
+    -destination "platform=macOS,arch=$(uname -m)" \
+    -derivedDataPath "$derived_data" \
+    CODE_SIGN_IDENTITY=- \
+    CODE_SIGN_STYLE=Manual \
+    DEVELOPMENT_TEAM= \
+    build
+
+codesign --verify --deep --strict "$built_app"
+entitlements_path=$(mktemp)
+trap 'rm -f "$entitlements_path"' 0
+codesign -d --entitlements - --xml "$built_app" > "$entitlements_path"
+for entitlement in \
+    com.apple.security.app-sandbox \
+    com.apple.security.files.user-selected.read-write \
+    com.apple.security.files.bookmarks.app-scope; do
+    if [ "$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$entitlements_path")" != true ]; then
+        printf 'Missing required entitlement: %s\n' "$entitlement" >&2
+        exit 1
+    fi
 done
+
+ensure_not_running
+mkdir -p "$package_root/build"
+rm -rf "$app_path"
+ditto "$built_app" "$app_path"
 plutil -lint "$app_path/Contents/Info.plist"
-cmp "$binary_dir/DawnMark" "$app_path/Contents/MacOS/DawnMark"
+codesign --verify --deep --strict "$app_path"
 touch "$app_path"
-printf '%s\n' "Built unsigned local app: $app_path" 'This app is not sandbox-signed. Use the Xcode project for signed distribution.'
+printf '%s\n' "Built sandboxed local app: $app_path" 'Ad-hoc signed for local testing only. App Store distribution requires a development team and distribution signing.'

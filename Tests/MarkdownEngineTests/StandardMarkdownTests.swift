@@ -32,7 +32,7 @@ import MarkdownEngine
                 session.undoManager.endUndoGrouping()
                 let prefix = before.isEmpty ? "" : before.hasSuffix(newline + newline) ? before : "Before" + newline + newline
                 let suffix = after.isEmpty ? "" : after.hasPrefix(newline + newline) ? after : newline + newline + "After"
-                #expect(session.source == prefix + "---" + suffix)
+                #expect(session.source == prefix + "***" + suffix)
                 let document = parsed(session.source)
                 #expect(document.children.filter { $0 is ThematicBreak }.count == 1)
                 #expect(!document.children.contains { $0 is Heading })
@@ -40,17 +40,17 @@ import MarkdownEngine
                 session.undoManager.undo()
                 #expect(session.source == source)
                 session.undoManager.redo()
-                #expect(session.source == prefix + "---" + suffix)
+                #expect(session.source == prefix + "***" + suffix)
             }
         }
         let empty = DocumentSession()
         #expect(empty.perform(.horizontalRule))
-        #expect(empty.source == "---")
+        #expect(empty.source == "***")
     }
 
     @Test func insertedTablesOnlyAddMissingBlankLineSeparators() throws {
         for newline in ["\n", "\r\n", "\r"] {
-            let table = ["|   |   |", "| --- | --- |", "|   |   |"].joined(separator: newline)
+            let table = ["|   |   |", "| --- | --- |"].joined(separator: newline)
             for (before, after) in [
                 ("", ""), ("Before", ""), ("", "After"), ("Before", "After"),
                 ("Before" + newline, newline + "After"),
@@ -80,7 +80,7 @@ import MarkdownEngine
         }
         let empty = DocumentSession()
         #expect(empty.perform(.insertTable(columns: 2, rows: 1)))
-        #expect(empty.source == "|   |   |\n| --- | --- |\n|   |   |")
+        #expect(empty.source == "|   |   |\n| --- | --- |")
     }
 
     @Test func menuIndentNeverTurnsParagraphsIntoCodeBlocks() throws {

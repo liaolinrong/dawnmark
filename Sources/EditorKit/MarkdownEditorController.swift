@@ -8,8 +8,18 @@ import AppKit
     public private(set) var textView: MarkdownTextView!
     public let outlineSidebar = OutlineSidebar(frame: .zero)
     public var sourceUpdated: ((String) -> Void)?
+    public var linkMenu: ((MarkdownLinkContext) -> NSMenu?)?
+    public var tableMenu: ((NSRange) -> NSMenu?)?
     public var onImportImages: (([URL], Data?) -> Void)? { didSet { textView?.onImportImages = onImportImages } }
-    public var imageProvider: ((String) -> NSImage?)? { didSet { imagesChanged = true; refresh() } }
+    public var imageProvider: ((String) -> NSImage?)? {
+        didSet {
+            if isViewLoaded, mode == .richText, modeViewportAnchor == nil {
+                modeViewportAnchor = captureViewportAnchor()
+            }
+            imagesChanged = true
+            refresh()
+        }
+    }
     public var canEdit: Bool {
         get { session.canEdit }
         set { session.canEdit = newValue; textView?.isEditable = newValue }
@@ -24,7 +34,11 @@ import AppKit
                 modeViewportAnchor = captureViewportAnchor()
             }
             currentMode = newValue
-            refresh()
+            if newValue == .richText, session.renderSnapshot?.source != session.source {
+                session.renderNow()
+            } else {
+                refresh()
+            }
         }
     }
     private var currentMode: EditorMode = .richText
@@ -58,7 +72,13 @@ import AppKit
             if !self.applyingNativeEdit { self.clearPendingStyles() }
             self.sourceUpdated?(value.source)
             self.textView?.isEditable = value.canEdit
-            if !self.applyingNativeEdit { self.refresh() }
+            if !self.applyingNativeEdit {
+                if self.mode == .richText, value.undoManager.isUndoing || value.undoManager.isRedoing {
+                    value.renderNow()
+                } else {
+                    self.refresh()
+                }
+            }
         }
         renderToken = session.observeRendering { [weak self] _ in self?.refresh() }
         editabilityToken = session.observeEditability { [weak self] value in
@@ -79,6 +99,7 @@ import AppKit
 
     public override func loadView() {
         let scroll = NSScrollView()
+        scroll.contentView = EditorClipView()
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         let storage = NSTextStorage()
@@ -127,13 +148,27 @@ import AppKit
         editor.onToggleCheckbox = { [weak self] in self?.toggleCheckbox(atDisplayedOffset: $0) == true }
         editor.onListNewline = { [weak self] in
             guard let self, self.mode == .richText else { return false }
-            return self.structuralEdit { self.session.continueList(in: self.selectedSourceRange()) }
+            return self.structuralEdit {
+                self.insertNewlineBeforeBlock() || self.session.continueList(in: self.selectedSourceRange())
+            }
         }
         editor.onListIndent = { [weak self] outdent in
             guard let self, self.mode == .richText else { return false }
             return self.structuralEdit {
                 self.session.indentList(in: self.selectedSourceRange(), outdent: outdent)
             }
+        }
+        editor.onLinkMenu = { [weak self] offset in
+            guard let self, let link = self.link(atDisplayedOffset: offset) else { return nil }
+            return self.linkMenu?(link)
+        }
+        editor.onTableMenu = { [weak self] offset in
+            guard let self, self.displayedSource == self.session.source,
+                  offset >= 0, offset < self.textView.string.utf16.count else { return nil }
+            let range = NSRange(location: offset, length: 0)
+            guard let sourceRange = self.mode == .source ? range : self.map?.sourceRange(forDisplayedRange: range),
+                  self.session.tableRange(in: sourceRange) != nil else { return nil }
+            return self.tableMenu?(sourceRange)
         }
         scroll.documentView = editor
         textView = editor
@@ -142,6 +177,27 @@ import AppKit
         view = root
         editor.registerForDraggedTypes(editor.readablePasteboardTypes)
         refresh()
+    }
+
+    public var currentLink: MarkdownLinkContext? {
+        guard textView?.isComposing != true, textView?.hasMarkedText() != true else { return nil }
+        return session.link(in: selectedSourceRange())
+    }
+
+    public func link(atDisplayedOffset offset: Int) -> MarkdownLinkContext? {
+        guard isViewLoaded, !textView.isComposing, !textView.hasMarkedText(),
+              displayedSource == session.source, offset >= 0, offset < textView.string.utf16.count else { return nil }
+        let range = NSRange(location: offset, length: 1)
+        let sourceRange = mode == .source ? range : map?.sourceRange(forDisplayedRange: range)
+        return sourceRange.flatMap { session.link(in: $0) }
+    }
+
+    @discardableResult public func updateLink(in range: NSRange, destination: String, label: String?) -> Bool {
+        structuralEdit { session.perform(.insertLink(destination: destination, label: label), in: range) }
+    }
+
+    @discardableResult public func removeLink(in range: NSRange) -> Bool {
+        structuralEdit { session.removeLink(in: range) }
     }
 
     public func selectedSourceRange() -> NSRange {
@@ -170,13 +226,14 @@ import AppKit
         return true
     }
 
-    @discardableResult public func insertMarkdown(_ markdown: String) -> Bool {
+    @discardableResult public func insertMarkdown(_ markdown: String, in range: NSRange? = nil) -> Bool {
         guard canEdit, textView?.isComposing != true, textView?.hasMarkedText() != true else { return false }
         clearPendingStyles()
-        return session.replaceSource(in: selectedSourceRange(), with: markdown)
+        return structuralEdit { session.replaceSource(in: range ?? selectedSourceRange(), with: markdown) }
     }
 
     public func formattingState(_ command: FormattingCommand) -> FormattingState {
+        guard textView?.isComposing != true, textView?.hasMarkedText() != true else { return .unavailable }
         let selection = selectedSourceRange()
         let state = session.formattingState(command, in: selection)
         guard canEdit, state != .unavailable else { return .unavailable }
@@ -208,6 +265,12 @@ import AppKit
         clearPendingStyles()
         if mode == .richText, case .indent = command { return structuralEdit { session.indentList(in: selectedSourceRange(), outdent: false) } }
         return structuralEdit { session.perform(command, in: selectedSourceRange()) }
+    }
+
+    @discardableResult public func perform(_ command: FormattingCommand, inSourceRange range: NSRange) -> Bool {
+        guard canEdit, textView?.isComposing != true, textView?.hasMarkedText() != true else { return false }
+        clearPendingStyles()
+        return structuralEdit { session.perform(command, in: range) }
     }
 
     private func clearPendingStyles() {
@@ -255,6 +318,30 @@ import AppKit
         return structuralEdit { session.toggleTaskCheckbox(atSourceOffset: segment.sourceNSRange.location + marker.location) }
     }
 
+    private func insertNewlineBeforeBlock() -> Bool {
+        let selection = textView.selectedRange()
+        guard selection.length == 0 else { return false }
+        if session.renderSnapshot?.source != session.source { session.renderNow() }
+        guard let snapshot = session.renderSnapshot else { return false }
+        let start: Int
+        if let heading = snapshot.headings.first(where: { $0.displayedRange.length > 0 && $0.displayedRange.location == selection.location }) {
+            start = heading.sourceRange.location
+        } else if let rule = snapshot.sourceMap.segments.first(where: { $0.kind == .attachment && $0.displayedNSRange.location == selection.location }),
+                  snapshot.runs.contains(where: { $0.style.contains(.horizontalRule) && $0.range.location == selection.location }) {
+            start = rule.sourceNSRange.location
+        } else { return false }
+        let source = session.source
+        let original = source as NSString
+        let line = original.lineRange(for: NSRange(location: start, length: 0))
+        let prefix = original.substring(with: NSRange(location: line.location, length: start - line.location))
+        guard prefix.allSatisfy({ $0 == " " || $0 == "\t" || $0 == ">" }) else { return false }
+        let newline = source.contains("\r\n") ? "\r\n" : source.contains("\r") && !source.contains("\n") ? "\r" : "\n"
+        let insertion = prefix + newline
+        let caret = snapshot.sourceMap.sourceOffset(forDisplayedOffset: selection.location)
+        return session.apply([SourcePatch(range: NSRange(location: line.location, length: 0), replacement: insertion)],
+                     selectionAfter: NSRange(location: caret + insertion.utf16.count, length: 0))
+    }
+
     private func structuralEdit(_ edit: () -> Bool) -> Bool {
         guard canEdit, textView?.isComposing != true, textView?.hasMarkedText() != true else { return false }
         applyingNativeEdit = true
@@ -264,20 +351,93 @@ import AppKit
         return accepted
     }
 
+    private enum RuleBoundary { case unaffected, converted([SourcePatch]), blocked }
+
+    private func ruleBoundary(deleting range: NSRange, patches: [SourcePatch]) -> RuleBoundary {
+        guard mode == .richText, range.length > 0,
+              textView.selectedRange() == NSRange(location: NSMaxRange(range), length: 0),
+              let snapshot = session.renderSnapshot, snapshot.source == session.source,
+              let rule = snapshot.runs.first(where: { $0.style.contains(.horizontalRule) && $0.range.location >= NSMaxRange(range) }) else { return .unaffected }
+        let gap = NSRange(location: range.location, length: rule.range.location - range.location)
+        guard (textView.string as NSString).substring(with: gap).allSatisfy({ $0.isWhitespace }) else { return .unaffected }
+        let originalOffset = snapshot.sourceMap.sourceOffset(forDisplayedOffset: rule.range.location)
+        let offset = patches.filter { NSMaxRange($0.range) <= originalOffset }.reduce(originalOffset) {
+            $0 + $1.replacement.utf16.count - $1.range.length
+        }
+        func keepsRule(_ patches: [SourcePatch]) -> Bool {
+            let source = NSMutableString(string: session.source)
+            for patch in patches.sorted(by: { $0.range.location > $1.range.location }) {
+                source.replaceCharacters(in: patch.range, with: patch.replacement)
+            }
+            let candidate = MarkdownRenderer.snapshot(source: source as String)
+            return candidate.runs.contains {
+                $0.style.contains(.horizontalRule) && candidate.sourceMap.sourceOffset(forDisplayedOffset: $0.range.location) == offset
+            }
+        }
+        if keepsRule(patches) { return .unaffected }
+        // `---` directly under text becomes a Setext underline; `***` stays a rule.
+        if let marker = snapshot.sourceMap.segments.first(where: { $0.kind == .attachment && $0.displayedNSRange.location == rule.range.location })?.sourceNSRange,
+           patches.allSatisfy({ NSMaxRange($0.range) <= marker.location }) {
+            let converted = patches + [SourcePatch(range: marker, replacement: "***")]
+            if keepsRule(converted) { return .converted(converted) }
+        }
+        return .blocked
+    }
+
     public func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         if self.textView.isCancellingComposition { return true }
         guard canEdit, !refreshing else { return false }
         if self.textView.isComposing || textView.hasMarkedText() { return true }
         guard let replacementString else { return false }
-        let sourceRange = mode == .source ? affectedCharRange : map?.sourceRange(forDisplayedRange: affectedCharRange)
+        let editingRange = affectedCharRange
+        if mode == .richText, replacementString.isEmpty, affectedCharRange.length == 1,
+           textView.selectedRange() == NSRange(location: NSMaxRange(affectedCharRange), length: 0),
+           affectedCharRange.location > 0, let storage = textView.textStorage,
+           storage.attribute(.markdownHorizontalRule, at: affectedCharRange.location - 1, effectiveRange: nil) != nil,
+           (storage.string as NSString).character(at: affectedCharRange.location) == 10 {
+            let text = storage.string as NSString
+            let next = NSMaxRange(affectedCharRange)
+            // A text line would merge into the rule marker, so select the rule first instead.
+            if next < text.length, text.character(at: next) != 10 {
+                textView.setSelectedRange(NSRange(location: affectedCharRange.location - 1, length: 1))
+                session.selectedSourceRange = selectedSourceRange()
+                return false
+            }
+        }
+        let deletingHorizontalRule = mode == .richText && replacementString.isEmpty && editingRange.length == 1
+            && textView.textStorage?.attribute(.markdownHorizontalRule, at: editingRange.location, effectiveRange: nil) != nil
+        let sourceRange = mode == .source ? editingRange : map?.sourceRange(forDisplayedRange: editingRange)
         if let sourceRange, applyPendingStyles(to: replacementString, in: sourceRange) { return false }
         session.selectedSourceRange = selectedSourceRange()
-        let patches: [SourcePatch]
-        if mode == .source { patches = [SourcePatch(range: affectedCharRange, replacement: replacementString)] }
+        var patches: [SourcePatch]
+        if mode == .source { patches = [SourcePatch(range: editingRange, replacement: replacementString)] }
         else {
             guard displayedSource == session.source, let map,
-                  let result = map.patches(forDisplayedRange: affectedCharRange, replacement: replacementString, source: session.source) else { return false }
+                  let result = map.patches(forDisplayedRange: editingRange, replacement: replacementString, source: session.source) else { return false }
             patches = result
+        }
+        if replacementString.isEmpty {
+            switch ruleBoundary(deleting: editingRange, patches: patches) {
+            case .unaffected: break
+            case .converted(let converted):
+                patches = converted
+                applyingNativeEdit = true
+                let accepted = session.apply(patches)
+                applyingNativeEdit = false
+                if accepted {
+                    session.renderNow()
+                    textView.setSelectedRange(NSRange(location: editingRange.location, length: 0))
+                    session.selectedSourceRange = selectedSourceRange()
+                }
+                return false
+            case .blocked:
+                let previous = (textView.string as NSString).rangeOfCharacter(from: .whitespacesAndNewlines.inverted,
+                    options: .backwards, range: NSRange(location: 0, length: editingRange.location))
+                let caret = previous.location == NSNotFound ? 0 : NSMaxRange(previous)
+                textView.setSelectedRange(NSRange(location: caret, length: 0))
+                session.selectedSourceRange = selectedSourceRange()
+                return false
+            }
         }
         let deletingListMarker = mode == .richText && replacementString.isEmpty && map?.segments.contains(where: {
             $0.isListMarker && NSIntersectionRange($0.displayedNSRange, affectedCharRange).length > 0
@@ -290,7 +450,7 @@ import AppKit
         applyingNativeEdit = true
         let accepted = session.apply(patches)
         applyingNativeEdit = false
-        if accepted, deletingListMarker || insertingInsideListMarker || insertingWhitespace {
+        if accepted, deletingHorizontalRule || deletingListMarker || insertingInsideListMarker || insertingWhitespace {
             session.renderNow()
             return false
         }
@@ -324,6 +484,36 @@ import AppKit
     public func textView(_ textView: NSTextView, shouldChangeTextInRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
         guard affectedRanges.count == 1, let replacement = replacementStrings?.first else { return false }
         return self.textView(textView, shouldChangeTextIn: affectedRanges[0].rangeValue, replacementString: replacement)
+    }
+
+    private func applyRenderedAttributes(_ result: NSAttributedString) -> Bool {
+        guard let storage = textView.textStorage, storage.string == result.string else { return false }
+        var changes: [(NSRange, [NSAttributedString.Key: Any])] = []
+        var linkChanges: [NSRange] = []
+        result.enumerateAttributes(in: NSRange(location: 0, length: result.length)) { attributes, range, _ in
+            storage.enumerateAttributes(in: range) { previous, span, _ in
+                var updated = attributes
+                if let attachment = previous[.attachment], attributes[.attachment] != nil,
+                   (attributes[.markdownHorizontalRule] != nil && previous[.markdownHorizontalRule] != nil
+                    || (attributes[NSAttributedString.Key("MarkdownImagePath")] as? String).map {
+                        $0 == previous[NSAttributedString.Key("MarkdownImagePath")] as? String
+                    } == true) {
+                    updated[.attachment] = attachment
+                }
+                if !NSDictionary(dictionary: previous).isEqual(to: updated) {
+                    changes.append((span, updated))
+                    if previous[.link] != nil || updated[.link] != nil { linkChanges.append(span) }
+                }
+            }
+        }
+        storage.beginEditing()
+        for (range, attributes) in changes { storage.setAttributes(attributes, range: range) }
+        storage.endEditing()
+        for range in linkChanges {
+            textView.layoutManager?.invalidateGlyphs(forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
+            textView.layoutManager?.invalidateDisplay(forCharacterRange: range)
+        }
+        return true
     }
 
     private func applyCheckboxUpdate(_ result: NSAttributedString) -> Bool {
@@ -377,6 +567,7 @@ import AppKit
         let clip = scroll.contentView
         let proposed = anchor.atTop ? 0 : rect.minY + textView.textContainerOrigin.y + anchor.lineFraction * rect.height
         let maximum = max(0, textView.bounds.height - clip.bounds.height)
+        (clip as? EditorClipView)?.preservesScrollOrigin = false
         clip.scroll(to: NSPoint(x: clip.bounds.minX, y: min(maximum, max(0, proposed))))
         scroll.reflectScrolledClipView(clip)
     }
@@ -384,9 +575,11 @@ import AppKit
     private func refresh() {
         guard isViewLoaded else { return }
         guard !textView.isComposing, !textView.hasMarkedText(), !applyingNativeEdit else { pendingRender = true; return }
+        let clip = textView.enclosingScrollView?.contentView as? EditorClipView
+        if modeViewportAnchor != nil { clip?.preservesScrollOrigin = true }
         let selection = session.selectedSourceRange
         refreshing = true
-        defer { refreshing = false }
+        defer { refreshing = false; clip?.preservesScrollOrigin = false }
         textView.isEditable = canEdit
         textView.isRichText = mode == .richText
         if let snapshot = session.renderSnapshot, snapshot.source == session.source {
@@ -405,7 +598,8 @@ import AppKit
         } else if let snapshot = session.renderSnapshot, snapshot.source == session.source {
             if renderedSnapshotSource != snapshot.source || displayedMode != .richText || imagesChanged {
                 let result = MarkdownRenderer.render(snapshot: snapshot, imageProvider: imageProvider)
-                if displayedMode != .richText || imagesChanged || !applyCheckboxUpdate(result.attributedString) {
+                if displayedMode != .richText || imagesChanged
+                    || (!applyRenderedAttributes(result.attributedString) && !applyCheckboxUpdate(result.attributedString)) {
                     textView.textStorage?.setAttributedString(result.attributedString)
                 }
                 map = result.sourceMap
@@ -477,5 +671,15 @@ import AppKit
         compositionMap = nil
         if let mode = pendingMode { pendingMode = nil; self.mode = mode }
         refresh()
+    }
+}
+
+@MainActor private final class EditorClipView: NSClipView {
+    var preservesScrollOrigin = false
+
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var result = super.constrainBoundsRect(proposedBounds)
+        if preservesScrollOrigin { result.origin = bounds.origin }
+        return result
     }
 }

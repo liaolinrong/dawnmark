@@ -14,6 +14,12 @@ extension NSParagraphStyle {
 }
 
 public final class TableLayoutManager: NSLayoutManager {
+    public override func fillBackgroundRectArray(_ rectArray: UnsafePointer<NSRect>, count rectCount: Int, forCharacterRange charRange: NSRange, color: NSColor) {
+        if charRange.length == 1, let storage = textStorage, charRange.location < storage.length,
+           storage.attribute(.markdownHorizontalRule, at: charRange.location, effectiveRange: nil) != nil { return }
+        super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
+    }
+
     public func headingSeparatorRect(at character: Int) -> NSRect? {
         guard let storage = textStorage, let container = textContainers.first,
               character >= 0, character < storage.length else { return nil }
@@ -78,7 +84,17 @@ public final class TableLayoutManager: NSLayoutManager {
         }
         storage.enumerateAttribute(.markdownHorizontalRule, in: visible) { value, range, _ in
             guard value != nil, let rect = self.horizontalRuleRect(at: range.location) else { return }
+            let textView = self.textContainers.first?.textView
             MainActor.assumeIsolated {
+                let selected = textView?.selectedRanges.contains {
+                    NSIntersectionRange($0.rangeValue, range).length > 0
+                } == true
+                if selected {
+                    NSColor.controlAccentColor.setStroke()
+                    let outline = NSBezierPath(rect: rect.insetBy(dx: -2, dy: -5).offsetBy(dx: origin.x, dy: origin.y))
+                    outline.lineWidth = 1
+                    outline.stroke()
+                }
                 NSColor.labelColor.withAlphaComponent(0.18).setFill()
                 rect.offsetBy(dx: origin.x, dy: origin.y).fill()
             }

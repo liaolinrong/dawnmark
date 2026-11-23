@@ -19,8 +19,8 @@ import UniformTypeIdentifiers
             let location = try DocumentStore().create(name: request.name, in: request.parent)
             let document = displayDocument(location, source: "")
             document.retainAccess(to: request.parent)
-            BookmarkStore.remember(request.parent)
-            BookmarkStore.remember(location.directoryURL)
+            try SecurityScopedBookmarks.shared.remember(request.parent)
+            try SecurityScopedBookmarks.shared.remember(location.directoryURL)
         } catch { showError(error) }
     }
 
@@ -32,25 +32,45 @@ import UniformTypeIdentifiers
         for url in panel.urls { openDocument(url) }
     }
 
-    func openDocument(_ url: URL) {
+    func openDocument(_ requestedURL: URL) {
+        let directory = SecurityScopedBookmarks.shared.resolveDirectory(containing: requestedURL)
+        let url = SecurityScopedBookmarks.shared.resolveFile(requestedURL) ?? requestedURL
         if let existing = NSDocumentController.shared.documents.first(where: { $0.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
             existing.showWindows()
             return
         }
+        let directoryAccess = directory?.startAccessingSecurityScopedResource() == true
+        defer { if directoryAccess { directory?.stopAccessingSecurityScopedResource() } }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         do {
             let location = DocumentLocation(markdownURL: url)
             let document = displayDocument(location, source: try DocumentStore().read(location))
             document.retainAccess(to: url)
-            if let directory = BookmarkStore.resolve(location.directoryURL) { document.retainAccess(to: directory) }
+            if let directory { document.retainAccess(to: directory) }
+            try SecurityScopedBookmarks.shared.remember(url)
         } catch { showError(error) }
     }
 
     @discardableResult func displayDocument(_ location: DocumentLocation, source: String) -> MarkdownDocument {
         let document = MarkdownDocument(location: location, source: source, commerce: commerce)
+        document.editor.linkMenu = { [weak self, weak document] link in
+            guard let self, let document else { return nil }
+            return self.makeLinkMenu(document: document, link: link)
+        }
+        document.editor.tableMenu = { [weak self, weak document] range in
+            guard let self, let document else { return nil }
+            return self.makeTableMenu(document: document, sourceRange: range)
+        }
         NSDocumentController.shared.addDocument(document)
         NSDocumentController.shared.noteNewRecentDocumentURL(location.markdownURL)
+        let snapshot = MarkdownRenderer.snapshot(source: source)
+        if snapshot.runs.contains(where: { run in
+            guard let path = run.imagePath else { return false }
+            return URLComponents(string: path)?.scheme == nil && !path.hasPrefix("//")
+        }) {
+            _ = document.authorizeDirectory()
+        }
         document.makeWindowControllers()
         document.showWindows()
         auxiliaryWindows["welcome"]?.close()
@@ -70,8 +90,8 @@ import UniformTypeIdentifiers
             let destination = try DocumentStore().duplicate(document.location, source: document.session.source, name: request.name, in: request.parent)
             let copy = displayDocument(destination, source: try DocumentStore().read(destination))
             copy.retainAccess(to: request.parent)
-            BookmarkStore.remember(request.parent)
-            BookmarkStore.remember(destination.directoryURL)
+            try SecurityScopedBookmarks.shared.remember(request.parent)
+            try SecurityScopedBookmarks.shared.remember(destination.directoryURL)
         } catch { showError(error) }
     }
 
@@ -118,15 +138,91 @@ import UniformTypeIdentifiers
 
     @objc func insertLink(_ sender: Any?) {
         guard let document = activeDocument, commerce.canEdit else { return }
-        let field = NSTextField(string: "https://")
-        field.frame = NSRect(x: 0, y: 0, width: 340, height: 24)
+        showLinkEditor(document: document, link: document.editor.currentLink)
+    }
+
+    func showLinkEditor(document: MarkdownDocument, link: MarkdownLinkContext?) {
+        guard commerce.canEdit, document.editor.canEdit,
+              document.editor.textView?.isComposing != true, document.editor.textView?.hasMarkedText() != true else { return }
+        let originalSource = document.session.source
+        let range = link?.sourceRange ?? document.editor.selectedSourceRange()
+        let form = LinkInsertionForm(editor: document.editor, link: link)
+        let selected = form.displayTextField.stringValue
         let alert = NSAlert()
-        alert.messageText = L10n.text(.linkAddress)
-        alert.accessoryView = field
-        alert.addButton(withTitle: L10n.text(.confirm)); alert.addButton(withTitle: L10n.text(.cancel))
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn, !field.stringValue.isEmpty else { return }
-        _ = document.editor.perform(.insertLink(destination: field.stringValue))
+        alert.messageText = L10n.text(link == nil ? .link : .editLink)
+        alert.accessoryView = form
+        alert.addButton(withTitle: L10n.text(link == nil ? .confirm : .save)); alert.addButton(withTitle: L10n.text(.cancel))
+        alert.window.initialFirstResponder = selected.isEmpty ? form.displayTextField : form.addressField
+        guard alert.runModal() == .alertFirstButtonReturn,
+              document.session.source == originalSource,
+              !form.addressField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let label = !selected.isEmpty && form.displayTextField.stringValue == selected ? nil : form.displayTextField.stringValue
+        _ = document.editor.updateLink(in: range, destination: form.addressField.stringValue, label: label)
+    }
+
+    func makeLinkMenu(document: MarkdownDocument, link: MarkdownLinkContext) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let context = LinkMenuContext(document: document, link: link)
+        let actions: [(TextKey, Selector)] = [(.editLink, #selector(editLinkFromMenu(_:))), (.openLink, #selector(openLinkFromMenu(_:))),
+                                             (.copyLinkAddress, #selector(copyLinkFromMenu(_:))), (.removeLink, #selector(removeLinkFromMenu(_:)))]
+        for (key, action) in actions {
+            let item = NSMenuItem(title: L10n.text(key), action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = context
+            if key == .editLink || key == .removeLink { item.isEnabled = commerce.canEdit && document.editor.canEdit }
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc func editLinkFromMenu(_ sender: NSMenuItem) {
+        guard let context = sender.representedObject as? LinkMenuContext,
+              let document = context.document, document.session.source == context.source else { return }
+        document.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
+        showLinkEditor(document: document, link: context.link)
+    }
+
+    @objc func openLinkFromMenu(_ sender: NSMenuItem) {
+        guard let context = sender.representedObject as? LinkMenuContext,
+              let document = context.document, let url = URL(string: context.link.destination, relativeTo: document.fileURL)?.absoluteURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc func copyLinkFromMenu(_ sender: NSMenuItem) {
+        guard let context = sender.representedObject as? LinkMenuContext else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(context.link.destination, forType: .string)
+    }
+
+    @objc func removeLinkFromMenu(_ sender: NSMenuItem) {
+        guard commerce.canEdit, let context = sender.representedObject as? LinkMenuContext,
+              let document = context.document, document.session.source == context.source else { return }
+        _ = document.editor.removeLink(in: context.link.sourceRange)
+    }
+
+    func makeTableMenu(document: MarkdownDocument, sourceRange: NSRange) -> NSMenu {
+        let menu = NSMenu(title: L10n.text(.tableActions))
+        menu.autoenablesItems = false
+        for (index, commands) in tableCommandGroups.enumerated() {
+            if index > 0 { menu.addItem(.separator()) }
+            for (key, command) in commands {
+                let item = NSMenuItem(title: L10n.text(key), action: #selector(tableCommandFromMenu(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = TableMenuContext(document: document, sourceRange: sourceRange, command: command)
+                item.isEnabled = commerce.canEdit && document.editor.canEdit
+                    && !document.editor.textView.isComposing && !document.editor.textView.hasMarkedText()
+                    && document.session.formattingState(command, in: sourceRange) != .unavailable
+                menu.addItem(item)
+            }
+        }
+        return menu
+    }
+
+    @objc func tableCommandFromMenu(_ sender: NSMenuItem) {
+        guard commerce.canEdit, let context = sender.representedObject as? TableMenuContext,
+              let document = context.document, document.session.source == context.source else { return }
+        _ = document.editor.perform(context.command, inSourceRange: context.sourceRange)
     }
 
     @objc func insertImage(_ sender: Any?) {
@@ -179,4 +275,65 @@ import UniformTypeIdentifiers
 @MainActor final class FormatBox: NSObject {
     let command: FormattingCommand
     init(_ command: FormattingCommand) { self.command = command }
+}
+
+@MainActor final class TableMenuContext: NSObject {
+    weak var document: MarkdownDocument?
+    let sourceRange: NSRange
+    let command: FormattingCommand
+    let source: String
+
+    init(document: MarkdownDocument, sourceRange: NSRange, command: FormattingCommand) {
+        self.document = document
+        self.sourceRange = sourceRange
+        self.command = command
+        source = document.session.source
+    }
+}
+
+@MainActor final class LinkMenuContext: NSObject {
+    weak var document: MarkdownDocument?
+    let link: MarkdownLinkContext
+    let source: String
+
+    init(document: MarkdownDocument, link: MarkdownLinkContext) {
+        self.document = document
+        self.link = link
+        source = document.session.source
+    }
+}
+
+@MainActor final class LinkInsertionForm: NSStackView {
+    let displayTextField: NSTextField
+    let addressField = NSTextField(string: "https://")
+
+    convenience init(editor: MarkdownEditorController, link: MarkdownLinkContext?) {
+        let textView = editor.textView!
+        let selected = link?.displayText ?? (textView.string as NSString).substring(with: textView.selectedRange())
+        self.init(displayText: selected, textLabel: L10n.text(.linkText), addressLabel: L10n.text(.linkAddress))
+        addressField.stringValue = link?.destination ?? "https://"
+    }
+
+    init(displayText: String, textLabel: String, addressLabel: String) {
+        displayTextField = NSTextField(string: displayText)
+        super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 112))
+        orientation = .vertical
+        alignment = .leading
+        spacing = 6
+        widthAnchor.constraint(equalToConstant: 360).isActive = true
+        for (title, field) in [(textLabel, displayTextField), (addressLabel, addressField)] {
+            let label = NSTextField(labelWithString: title)
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 0
+            field.setAccessibilityLabel(title)
+            addArrangedSubview(label)
+            addArrangedSubview(field)
+            label.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
+            field.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
+        }
+        displayTextField.nextKeyView = addressField
+        frame.size.height = fittingSize.height
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 }

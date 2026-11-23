@@ -25,6 +25,19 @@ extension NSAttributedString.Key {
 
 public protocol CodeBlockBackgroundDrawing: AnyObject {}
 
+public protocol TableBackgroundDrawing: AnyObject {}
+
+public final class MarkdownTableBlock: NSTextTableBlock {
+    public override func drawBackground(withFrame frameRect: NSRect, in controlView: NSView, characterRange charRange: NSRange, layoutManager: NSLayoutManager) {
+        guard !(controlView is any TableBackgroundDrawing) else { return }
+        super.drawBackground(withFrame: frameRect, in: controlView, characterRange: charRange, layoutManager: layoutManager)
+    }
+
+    @MainActor public func drawFrame(_ frame: NSRect, in view: NSView, characterRange: NSRange, layoutManager: NSLayoutManager) {
+        super.drawBackground(withFrame: frame, in: view, characterRange: characterRange, layoutManager: layoutManager)
+    }
+}
+
 public final class QuoteTextBlock: NSTextTableBlock {
     public init() {
         let table = NSTextTable()
@@ -200,6 +213,10 @@ public enum MarkdownRenderer {
             if run.style.contains(.horizontalRule) {
                 attributes[.markdownHorizontalRule] = true
                 attributes[.foregroundColor] = NSColor.clear
+                let attachment = NSTextAttachment()
+                attachment.image = NSImage(size: NSSize(width: 1, height: 1))
+                attachment.bounds = NSRect(x: 0, y: 0, width: 1, height: 1)
+                attributes[.attachment] = attachment
                 let ruleParagraph = paragraph.mutableCopy() as! NSMutableParagraphStyle
                 ruleParagraph.minimumLineHeight = 28
                 ruleParagraph.lineSpacing = 0
@@ -261,7 +278,7 @@ public enum MarkdownRenderer {
             table.collapsesBorders = true
             table.setContentWidth(100, type: .percentageValueType)
             tables[cell.table] = table
-            let block = NSTextTableBlock(table: table, startingRow: cell.row, rowSpan: 1, startingColumn: cell.column, columnSpan: 1)
+            let block = MarkdownTableBlock(table: table, startingRow: cell.row, rowSpan: 1, startingColumn: cell.column, columnSpan: 1)
             block.setContentWidth(100 / CGFloat(cell.columns), type: .percentageValueType)
             block.setWidth(6, type: .absoluteValueType, for: .padding)
             block.setWidth(0.5, type: .absoluteValueType, for: .border)
@@ -374,6 +391,27 @@ private struct RenderVisitor: MarkupVisitor {
             if found.location != NSNotFound, found.length > 0 { return found }
         }
         let content = mapped ?? NSRange(location: sourceLength, length: 0)
+        if let heading = markup as? Heading, heading.level <= 2,
+           let last = heading.child(at: max(0, heading.childCount - 1)) {
+            let lastEnd = NSMaxRange(range(last))
+            if lastEnd > content.location, lastEnd <= sourceLength {
+                let contentLine = original.lineRange(for: NSRange(location: lastEnd - 1, length: 0))
+                let underlineStart = NSMaxRange(contentLine)
+                if underlineStart < sourceLength, underlineStart < NSMaxRange(content) {
+                    let underline = original.lineRange(for: NSRange(location: underlineStart, length: 0))
+                    var value = raw(underline).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let prefix = Self.quotePrefix.firstMatch(in: value, range: NSRange(location: 0, length: value.utf16.count)) {
+                        value = (value as NSString).substring(from: NSMaxRange(prefix.range)).trimmingCharacters(in: .whitespaces)
+                    }
+                    let marker: Character = heading.level == 1 ? "=" : "-"
+                    if !value.isEmpty, value.allSatisfy({ $0 == marker }) {
+                        var end = NSMaxRange(underline)
+                        while end > underlineStart, [10, 13].contains(original.character(at: end - 1)) { end -= 1 }
+                        return NSRange(location: content.location, length: end - content.location)
+                    }
+                }
+            }
+        }
         guard let node = markup as? Markdown.Text else { return content }
         let line = original.lineRange(for: NSRange(location: content.location, length: 0))
           guard raw(content) != node.string else { return content }
@@ -526,7 +564,7 @@ private struct RenderVisitor: MarkupVisitor {
     mutating func visitDocument(_ document: Document) {
         if let first = document.child(at: 0) {
             let leading = NSRange(location: 0, length: range(first).location)
-            if raw(leading).contains("\n") { gap(from: 0, to: leading.length) }
+            if raw(leading).contains(where: { $0.isNewline }) { gap(from: 0, to: leading.length) }
             else if !(first is CodeBlock), raw(leading).allSatisfy({ $0 == " " || $0 == "\t" }) {
                 literal(raw(leading), sourceRange: leading)
             }

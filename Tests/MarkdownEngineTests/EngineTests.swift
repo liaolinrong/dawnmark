@@ -4,6 +4,179 @@ import MarkdownEngine
 import EditorKit
 
 @Suite(.serialized) @MainActor struct EngineTests {
+    @Test func sourceOffsetsPreferContainingSegmentsOverEarlierUnmappedNodes() {
+        let map = SourceMap(segments: [
+            MappingSegment(displayedNSRange: NSRange(location: 0, length: 3), sourceNSRange: NSRange(location: 0, length: 3), kind: .text, isIdentity: true),
+            MappingSegment(displayedNSRange: NSRange(location: 3, length: 1), sourceNSRange: NSRange(location: 40, length: 0), kind: .attachment, isIdentity: false),
+            MappingSegment(displayedNSRange: NSRange(location: 4, length: 10), sourceNSRange: NSRange(location: 4, length: 10), kind: .text, isIdentity: true)
+        ], sourceLength: 40, displayedLength: 14)
+        #expect(map.displayedOffset(forSourceOffset: 6) == 6)
+        #expect(map.displayedOffset(forSourceOffset: 3) == 4)
+        #expect(map.displayedOffset(forSourceOffset: 40) == 14)
+        #expect(map.sourceOffset(forDisplayedOffset: map.displayedOffset(forSourceOffset: 6)) == 6)
+    }
+
+    @Test func returnBeforeThirdSpacedChineseWordKeepsCaretVisible() async throws {
+        let line = "点多到      点多到      点多到      点多到       "
+        let table = "| | | |\n| --- | --- | --- |\n| | | |\n| | | |\n| | | |\n\n"
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = try String(contentsOf: root.appendingPathComponent("TestDoc/测试文档/测试文档.md"), encoding: .utf8)
+        let sources = [line + "\n\n" + table, table + line + "\n\n" + table,
+                       String(repeating: "## Heading\n\nParagraph text.\n\n", count: 40) + table + line + "\n\n" + table, fixture]
+        for source in sources {
+            let session = DocumentSession(source: source)
+            session.undoManager.groupsByEvent = false
+            session.renderNow()
+            let controller = MarkdownEditorController(session: session)
+            let image = NSImage(size: NSSize(width: 720, height: 500))
+            controller.imageProvider = { _ in image }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentViewController = controller
+            window.makeKeyAndOrderFront(nil)
+            defer { window.orderOut(nil); window.contentViewController = nil }
+            controller.view.layoutSubtreeIfNeeded()
+            let editor = controller.textView!
+            window.makeFirstResponder(editor)
+            let layout = try #require(editor.layoutManager)
+            let container = try #require(editor.textContainer)
+            let lineRange = (source as NSString).range(of: line)
+            #expect(lineRange.location != NSNotFound)
+            let sourceCaret = lineRange.location + "点多到      点多到      ".utf16.count
+            let selection = session.renderSnapshot!.sourceMap.displayedRange(forSourceRange: NSRange(location: sourceCaret, length: 0))
+            editor.setSelectedRange(selection)
+            #expect(controller.selectedSourceRange() == NSRange(location: sourceCaret, length: 0))
+            layout.ensureLayout(for: container)
+            editor.sizeToFit()
+            editor.scrollRangeToVisible(selection)
+            session.undoManager.beginUndoGrouping()
+            editor.insertNewline(nil)
+            session.undoManager.endUndoGrouping()
+            let expected = (source as NSString).replacingCharacters(in: NSRange(location: sourceCaret, length: 0), with: "\n")
+            if session.source != expected {
+                Issue.record("Return source mismatch: insertion=\(sourceCaret), selected=\(session.selectedSourceRange), display=\(selection)")
+            }
+            for wait in [false, true] {
+                if wait { await session.waitForRendering() }
+                layout.ensureLayout(for: container)
+                editor.sizeToFit()
+                let displayed = editor.string as NSString
+                let start = displayed.range(of: "点多到      点多到").location
+                let expectedCaret = displayed.range(of: "\n", range: NSRange(location: start, length: displayed.length - start)).location + 1
+                #expect(editor.selectedRange() == NSRange(location: expectedCaret, length: 0))
+                #expect(window.firstResponder === editor)
+                let caret = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
+                #expect(caret.height > 0 && caret.minX.isFinite && caret.minY.isFinite)
+                let local = editor.convert(window.convertFromScreen(caret), from: nil)
+                #expect(editor.visibleRect.intersects(local.insetBy(dx: -1, dy: 0)))
+            }
+            session.undoManager.beginUndoGrouping()
+            editor.insertText("X", replacementRange: editor.selectedRange())
+            session.undoManager.endUndoGrouping()
+            if session.source != (expected as NSString).replacingCharacters(in: NSRange(location: sourceCaret + 1, length: 0), with: "X") {
+                Issue.record("Typing after Return did not insert at source \(sourceCaret + 1)")
+            }
+            session.undoManager.undo()
+            if session.source != expected { Issue.record("Undo typing did not restore expected Return source") }
+            session.undoManager.undo()
+            #expect(session.source == source)
+        }
+    }
+
+    @Test func typingReparseDoesNotReplaceUnchangedDisplayedCharacters() async throws {
+        @MainActor final class Edits {
+            var ranges: [NSRange] = []
+            let storage: NSTextStorage
+            init(storage: NSTextStorage) { self.storage = storage }
+        }
+        _ = NSApplication.shared
+        let session = DocumentSession(source: String(repeating: "## Heading\n\nParagraph **bold** text.\n\n***\n\n", count: 40))
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        let editor = controller.textView!
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil); window.contentViewController = nil }
+        controller.view.layoutSubtreeIfNeeded()
+        let layout = try #require(editor.layoutManager)
+        let container = try #require(editor.textContainer)
+        let clip = try #require(editor.enclosingScrollView?.contentView)
+        let storage = try #require(editor.textStorage)
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        let caret = (editor.string as NSString).range(of: "Paragraph", options: [], range: NSRange(location: storage.length / 2, length: storage.length - storage.length / 2)).location + 4
+        editor.setSelectedRange(NSRange(location: caret, length: 0))
+        editor.scrollRangeToVisible(editor.selectedRange())
+        let origin = clip.bounds.origin
+        let edits = Edits(storage: storage)
+        let token = NotificationCenter.default.addObserver(forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil) { _ in
+            MainActor.assumeIsolated {
+            let storage = edits.storage
+                if storage.editedMask.contains(.editedCharacters) { edits.ranges.append(storage.editedRange) }
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+        for character in ["x", "中", "y"] {
+            edits.ranges.removeAll()
+            let insertion = editor.selectedRange().location
+            editor.insertText(character, replacementRange: editor.selectedRange())
+            layout.ensureLayout(for: container)
+            editor.sizeToFit()
+            #expect(abs(clip.bounds.minY - origin.y) < 1)
+            await session.waitForRendering()
+            layout.ensureLayout(for: container)
+            editor.sizeToFit()
+            #expect(edits.ranges == [NSRange(location: insertion, length: character.utf16.count)])
+            #expect(abs(clip.bounds.minY - origin.y) < 1)
+            #expect(editor.selectedRange() == NSRange(location: insertion + character.utf16.count, length: 0))
+        }
+    }
+
+    @Test func horizontalRuleCaretHasDistinctSidesAndKeyboardEntry() throws {
+        _ = NSApplication.shared
+        let session = DocumentSession(source: "Before\n\n***\n\nAfter")
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        let editor = controller.textView!
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil); window.contentViewController = nil }
+        controller.view.layoutSubtreeIfNeeded()
+        let layout = try #require(editor.layoutManager as? TableLayoutManager)
+        layout.ensureLayout(for: editor.textContainer!)
+        let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+        let before = editor.firstRect(forCharacterRange: NSRange(location: rule, length: 0), actualRange: nil)
+        let after = editor.firstRect(forCharacterRange: NSRange(location: rule + 1, length: 0), actualRange: nil)
+        #expect(after.minX - before.minX > 300)
+        editor.setSelectedRange(NSRange(location: rule - 1, length: 0))
+        editor.moveDown(nil)
+        #expect(editor.selectedRange() == NSRange(location: rule, length: 0))
+        editor.setSelectedRange(NSRange(location: rule + 2, length: 0))
+        editor.moveUp(nil)
+        #expect(editor.selectedRange() == NSRange(location: rule, length: 0))
+        editor.deleteBackward(nil)
+        #expect(session.source == "Before\n***\n\nAfter")
+        session.undoManager.undo()
+        editor.setSelectedRange(NSRange(location: rule, length: 0))
+        let originalRect = try #require(layout.horizontalRuleRect(at: rule))
+        editor.insertNewline(nil)
+        layout.ensureLayout(for: editor.textContainer!)
+        #expect(session.source == "Before\n\n\n***\n\nAfter")
+        let movedRect = try #require(layout.horizontalRuleRect(at: rule + 1))
+        #expect(movedRect.minY > originalRect.minY + 10)
+        session.undoManager.undo()
+        editor.setSelectedRange(NSRange(location: rule + 2, length: 0))
+        editor.deleteBackward(nil)
+        layout.ensureLayout(for: editor.textContainer!)
+        #expect(session.source == "Before\n\n***\nAfter")
+        #expect(editor.selectedRange() == NSRange(location: rule + 1, length: 0))
+        let deletedBlankCaret = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
+        #expect(deletedBlankCaret.minX - before.minX > 300)
+    }
+
     @Test func thematicBreaksPreserveBlankLinesBetweenRules() {
         for newline in ["\n", "\r\n", "\r"] {
             for count in 1...5 {
@@ -50,6 +223,60 @@ import EditorKit
         session.undoManager.undo()
         session.renderNow()
         #expect(session.source == source)
+    }
+
+    @Test func horizontalRuleUndoKeepsViewportStable() async throws {
+        _ = NSApplication.shared
+        let source = String(repeating: "## Heading\n\nParagraph **bold** text.\n\n", count: 60) + "---\n\nAfter rule\n\n" + String(repeating: "Following paragraph.\n\n", count: 60)
+        let session = DocumentSession(source: source)
+        session.undoManager.groupsByEvent = false
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        controller.view.layoutSubtreeIfNeeded()
+        let editor = controller.textView!
+        let layout = try #require(editor.layoutManager as? TableLayoutManager)
+        let container = try #require(editor.textContainer)
+        let clip = try #require(editor.enclosingScrollView?.contentView)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil) }
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        let character = (editor.string as NSString).range(of: "\u{FFFC}").location
+        let rule = try #require(layout.horizontalRuleRect(at: character))
+        editor.setSelectedRange(NSRange(location: character + 1, length: 0))
+        editor.scroll(NSPoint(x: 0, y: rule.minY + editor.textContainerOrigin.y - 120))
+        let before = clip.bounds.origin
+        #expect(before.y > 1000)
+        session.undoManager.beginUndoGrouping()
+        editor.deleteBackward(nil)
+        session.undoManager.endUndoGrouping()
+        session.renderNow()
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        let deletedSource = session.source
+        session.undoManager.undo()
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        #expect(abs(clip.bounds.minY - before.y) < 1)
+        await session.waitForRendering()
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        #expect(session.source == source)
+        #expect(editor.selectedRange() == NSRange(location: character + 1, length: 0))
+        #expect(abs(clip.bounds.minY - before.y) < 1)
+        session.undoManager.redo()
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        #expect(abs(clip.bounds.minY - before.y) < 1)
+        await session.waitForRendering()
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        #expect(session.source == deletedSource)
+        #expect(abs(clip.bounds.minY - before.y) < 1)
+        window.contentViewController = nil
     }
 
     @Test func horizontalRulesDrawAcrossEditorAndResize() throws {
@@ -172,6 +399,55 @@ import EditorKit
         }
     }
 
+    @Test func setextHeadingKeepsFollowingHeadingOnSeparateLine() throws {
+        for newline in ["\n", "\r\n", "\r"] {
+            for marker in ["---", "==="] {
+                                for blankLines in [0, 1, 3] {
+                                        let source = (["哈哈", marker] + Array(repeating: "", count: blankLines) + ["## Kivo 深度测评", "Body"]).joined(separator: newline)
+                                        let snapshot = MarkdownRenderer.snapshot(source: source)
+                                        #expect(snapshot.text == "哈哈" + String(repeating: "\n", count: blankLines + 1) + "Kivo 深度测评\nBody")
+                                        #expect(snapshot.headings.map(\.title) == ["哈哈", "Kivo 深度测评"])
+                                        let headingRange = try #require(snapshot.headings.first?.sourceRange)
+                                        #expect((source as NSString).substring(with: headingRange) == "哈哈" + newline + marker)
+                                        let breaks = snapshot.sourceMap.segments.filter { $0.kind == .lineBreak }
+                                        #expect(breaks.count == blankLines + 2)
+                                        #expect(breaks.allSatisfy { (source as NSString).substring(with: $0.sourceNSRange) == newline })
+                                        let storage = NSTextStorage(attributedString: MarkdownRenderer.render(snapshot: snapshot).attributedString)
+                                        let layout = TableLayoutManager()
+                                        let container = NSTextContainer(size: NSSize(width: 520, height: 10_000))
+                                        layout.addTextContainer(container)
+                                        storage.addLayoutManager(layout)
+                                        layout.ensureLayout(for: container)
+                                        let first = try #require(snapshot.headings.first)
+                                        let second = try #require(snapshot.headings.last)
+                                        let firstLine = layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: first.displayedRange.location), effectiveRange: nil)
+                                        let secondLine = layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: second.displayedRange.location), effectiveRange: nil)
+                                        #expect(secondLine.minY >= firstLine.maxY)
+                                        #expect(snapshot.source == source)
+                                }
+            }
+        }
+        let source = "哈哈\n---\n## Kivo **深度测评**\nBody"
+        let session = DocumentSession(source: source)
+        session.undoManager.groupsByEvent = false
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        _ = controller.view
+        let editor = controller.textView!
+        let target = (editor.string as NSString).range(of: "Kivo")
+        editor.setSelectedRange(NSRange(location: target.location, length: 0))
+        session.undoManager.beginUndoGrouping()
+        editor.insertText("新", replacementRange: editor.selectedRange())
+        session.undoManager.endUndoGrouping()
+        session.renderNow()
+        #expect(session.source == "哈哈\n---\n## 新Kivo **深度测评**\nBody")
+        #expect(editor.string == "哈哈\n新Kivo 深度测评\nBody")
+        session.undoManager.undo()
+        session.renderNow()
+        #expect(session.source == source)
+        #expect(editor.string == "哈哈\nKivo 深度测评\nBody")
+    }
+
     @Test func headingSeparatorsFollowEditsUndoAndEditorMode() throws {
         let source = "# Heading *emphasis*\n\nBody"
         let session = DocumentSession(source: source)
@@ -211,6 +487,314 @@ import EditorKit
         controller.mode = .richText
         #expect(hasSeparator())
         #expect(session.source == source)
+    }
+
+    @Test func clickingHorizontalRuleSelectsAndDeletesWholeObject() async throws {
+        _ = NSApplication.shared
+        let source = "Before\n\n---\nAfter"
+        let session = DocumentSession(source: source)
+        session.undoManager.groupsByEvent = false
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        controller.view.layoutSubtreeIfNeeded()
+        let editor = controller.textView!
+        window.makeFirstResponder(editor)
+        let layout = try #require(editor.layoutManager as? TableLayoutManager)
+        layout.ensureLayout(for: editor.textContainer!)
+        func sampledColor(in rect: NSRect) throws -> NSColor {
+            let bitmap = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
+            editor.cacheDisplay(in: editor.bounds, to: bitmap)
+            let horizontal = Int((rect.midX + editor.textContainerOrigin.x) * CGFloat(bitmap.pixelsWide) / editor.bounds.width)
+            let vertical = Int((rect.midY + editor.textContainerOrigin.y) * CGFloat(bitmap.pixelsHigh) / editor.bounds.height)
+            return try #require(bitmap.colorAt(x: horizontal, y: vertical)?.usingColorSpace(.deviceRGB))
+        }
+        let character = (editor.string as NSString).range(of: "\u{FFFC}").location
+        for clickCount in [1, 2] {
+            for fraction in [CGFloat(0.1), 0.5, 0.9] {
+                let rect = try #require(layout.horizontalRuleRect(at: character))
+                editor.setSelectedRange(NSRange(location: 0, length: 0))
+                let unselected = try sampledColor(in: rect)
+                let borderRect = rect.offsetBy(dx: 0, dy: -6)
+                let unselectedBorder = try sampledColor(in: borderRect)
+                let interiorRect = rect.offsetBy(dx: 0, dy: -3)
+                let unselectedInterior = try sampledColor(in: interiorRect)
+                let point = editor.convert(NSPoint(x: rect.minX + rect.width * fraction + editor.textContainerOrigin.x, y: rect.midY + editor.textContainerOrigin.y), to: nil)
+                let hover = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+                NSCursor.iBeam.set()
+                editor.mouseMoved(with: hover)
+                #expect(NSCursor.current == NSCursor.pointingHand)
+                NSCursor.iBeam.set()
+                editor.cursorUpdate(with: hover)
+                #expect(NSCursor.current == NSCursor.pointingHand)
+                let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: clickCount, pressure: 1))
+                let up = try #require(NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 0.01, windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: clickCount, pressure: 0))
+                editor.mouseDown(with: down)
+                editor.mouseUp(with: up)
+                #expect(editor.selectedRange() == NSRange(location: character, length: 1))
+                let selected = try sampledColor(in: rect)
+                #expect(max(abs(selected.redComponent - unselected.redComponent), abs(selected.greenComponent - unselected.greenComponent), abs(selected.blueComponent - unselected.blueComponent)) < 0.02)
+                let selectedBorder = try sampledColor(in: borderRect)
+                #expect(max(abs(selectedBorder.redComponent - unselectedBorder.redComponent), abs(selectedBorder.greenComponent - unselectedBorder.greenComponent), abs(selectedBorder.blueComponent - unselectedBorder.blueComponent)) > 0.02)
+                let selectedInterior = try sampledColor(in: interiorRect)
+                #expect(max(abs(selectedInterior.redComponent - unselectedInterior.redComponent), abs(selectedInterior.greenComponent - unselectedInterior.greenComponent), abs(selectedInterior.blueComponent - unselectedInterior.blueComponent)) < 0.02)
+                editor.setSelectedRange(NSRange(location: 0, length: 0))
+                let cleared = try sampledColor(in: rect)
+                #expect(max(abs(cleared.redComponent - unselected.redComponent), abs(cleared.greenComponent - unselected.greenComponent), abs(cleared.blueComponent - unselected.blueComponent)) < 0.02)
+                let clearedBorder = try sampledColor(in: borderRect)
+                #expect(max(abs(clearedBorder.redComponent - unselectedBorder.redComponent), abs(clearedBorder.greenComponent - unselectedBorder.greenComponent), abs(clearedBorder.blueComponent - unselectedBorder.blueComponent)) < 0.02)
+                editor.mouseDown(with: down)
+                editor.mouseUp(with: up)
+                session.undoManager.beginUndoGrouping()
+                editor.deleteBackward(nil)
+                session.undoManager.endUndoGrouping()
+                #expect(session.source == "Before\n\n\nAfter")
+                #expect(editor.string == "Before\n\n\nAfter")
+                session.undoManager.undo()
+                #expect(session.source == source)
+                #expect(editor.selectedRange() == NSRange(location: character, length: 1))
+                session.undoManager.redo()
+                #expect(session.source == "Before\n\n\nAfter")
+                session.undoManager.undo()
+                #expect(session.source == source)
+            }
+        }
+        window.contentViewController = nil
+    }
+
+    @Test func horizontalRuleCursorRectsHandleClippingAndReadOnly() throws {
+        _ = NSApplication.shared
+        let source = String(repeating: "Before\n\n***\n\nAfter\n\n", count: 80)
+        let session = DocumentSession(source: source)
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        controller.view.layoutSubtreeIfNeeded()
+        let editor = controller.textView!
+        defer { window.contentViewController = nil }
+        let layout = try #require(editor.layoutManager as? TableLayoutManager)
+        layout.ensureLayout(for: editor.textContainer!)
+        editor.sizeToFit()
+        let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+        let rect = try #require(layout.horizontalRuleRect(at: rule))
+        for offset in [CGFloat(0), rect.minY + editor.textContainerOrigin.y + 1, rect.maxY + editor.textContainerOrigin.y + 5, CGFloat(1000)] {
+            editor.scroll(NSPoint(x: 0, y: offset))
+            editor.resetCursorRects()
+        }
+        editor.scroll(.zero)
+        controller.canEdit = false
+        editor.resetCursorRects()
+        let point = editor.convert(NSPoint(x: rect.midX + editor.textContainerOrigin.x, y: rect.midY + editor.textContainerOrigin.y), to: nil)
+        let hover = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+        NSCursor.iBeam.set()
+        editor.cursorUpdate(with: hover)
+        #expect(NSCursor.current == NSCursor.pointingHand)
+        controller.mode = .source
+        editor.resetCursorRects()
+        NSCursor.iBeam.set()
+        editor.mouseMoved(with: hover)
+        #expect(NSCursor.current != NSCursor.pointingHand)
+        #expect(session.source == source)
+    }
+
+    @Test func backspaceBeforeHorizontalRuleDeletesBlankLineAndKeepsRule() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for marker in ["---", "***", "___", "- - -"] {
+                let source = "Before" + newline + newline + marker + newline + "After"
+                let kept = marker == "---" ? "***" : marker
+                let session = DocumentSession(source: source)
+                session.undoManager.groupsByEvent = false
+                session.renderNow()
+                let controller = MarkdownEditorController(session: session)
+                _ = controller.view
+                let editor = controller.textView!
+                let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+                editor.setSelectedRange(NSRange(location: rule, length: 0))
+                session.undoManager.beginUndoGrouping()
+                editor.deleteBackward(nil)
+                session.undoManager.endUndoGrouping()
+                session.renderNow()
+                #expect(session.source == "Before" + newline + kept + newline + "After")
+                #expect(editor.string == "Before\n\u{FFFC}\nAfter")
+                #expect(editor.selectedRange() == NSRange(location: rule - 1, length: 0))
+                editor.deleteBackward(nil)
+                #expect(session.source == "Before" + newline + kept + newline + "After")
+                #expect(editor.selectedRange() == NSRange(location: 6, length: 0))
+                session.undoManager.undo()
+                #expect(session.source == source)
+                session.undoManager.redo()
+                #expect(session.source == "Before" + newline + kept + newline + "After")
+            }
+        }
+    }
+
+    @Test func backspaceOnBlankLineBeforeRuleMergesUpward() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for fromBlankLine in [false, true] {
+                let source = ["---", "", "哈哈", "", "---", "## Kivo 深度测评"].joined(separator: newline)
+                let expected = ["---", "", "哈哈", "***", "## Kivo 深度测评"].joined(separator: newline)
+                let session = DocumentSession(source: source)
+                session.undoManager.groupsByEvent = false
+                session.renderNow()
+                let controller = MarkdownEditorController(session: session)
+                _ = controller.view
+                let editor = controller.textView!
+                let rule = (editor.string as NSString).range(of: "\u{FFFC}", options: .backwards).location
+                let caret = rule - (fromBlankLine ? 1 : 0)
+                editor.setSelectedRange(NSRange(location: caret, length: 0))
+                session.undoManager.beginUndoGrouping()
+                editor.deleteBackward(nil)
+                session.undoManager.endUndoGrouping()
+                session.renderNow()
+                #expect(session.source == expected)
+                #expect(editor.string == "\u{FFFC}\n\n哈哈\n\u{FFFC}\nKivo 深度测评")
+                #expect(editor.selectedRange() == NSRange(location: caret - 1, length: 0))
+                session.undoManager.undo()
+                #expect(session.source == source)
+                #expect(editor.selectedRange() == NSRange(location: caret, length: 0))
+            }
+        }
+    }
+
+    @Test func horizontalRuleDeletionIsDirectionalAndAtomic() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for marker in ["---", "***", "___", "- - -"] {
+                for action in 0...3 {
+                    let source = "Before" + newline + newline + marker + newline + "After"
+                    let expected = "Before" + newline + newline + newline + "After"
+                    let session = DocumentSession(source: source)
+                    session.undoManager.groupsByEvent = false
+                    session.renderNow()
+                    let controller = MarkdownEditorController(session: session)
+                    _ = controller.view
+                    let editor = controller.textView!
+                    let character = (editor.string as NSString).range(of: "\u{FFFC}").location
+                    let selection = action == 0 ? NSRange(location: character + 1, length: 0)
+                        : action == 1 ? NSRange(location: character, length: 0)
+                        : action == 2 ? NSRange(location: character, length: 1)
+                        : NSRange(location: character + 2, length: 0)
+                    editor.setSelectedRange(selection)
+                    if action == 3 {
+                        editor.deleteBackward(nil)
+                        #expect(session.source == source)
+                        #expect(editor.selectedRange() == NSRange(location: character, length: 1))
+                    }
+                    let deleting = editor.selectedRange()
+                    session.undoManager.beginUndoGrouping()
+                    if action == 1 { editor.deleteForward(nil) }
+                    else { editor.deleteBackward(nil) }
+                    session.undoManager.endUndoGrouping()
+                    #expect(session.source == expected)
+                    #expect(editor.string == "Before\n\n\nAfter")
+                    session.renderNow()
+                    #expect(editor.string == "Before\n\n\nAfter")
+                    session.undoManager.undo()
+                    #expect(session.source == source)
+                    #expect(editor.selectedRange() == deleting)
+                    session.undoManager.redo()
+                    #expect(session.source == expected)
+                }
+            }
+        }
+    }
+
+    @Test func backspaceOnBlankLineBelowRuleRemovesOnlyTheBlankLine() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for marker in ["***", "---", "___"] {
+                for after in ["After", ""] {
+                    let source = "Before" + newline + newline + marker + newline + newline + after
+                    let session = DocumentSession(source: source)
+                    session.undoManager.groupsByEvent = false
+                    session.renderNow()
+                    let controller = MarkdownEditorController(session: session)
+                    _ = controller.view
+                    let editor = controller.textView!
+                    let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+                    editor.setSelectedRange(NSRange(location: rule + 2, length: 0))
+                    session.undoManager.beginUndoGrouping()
+                    editor.deleteBackward(nil)
+                    session.undoManager.endUndoGrouping()
+                    session.renderNow()
+                    #expect(session.source == "Before" + newline + newline + marker + newline + after)
+                    #expect(editor.string == MarkdownRenderer.snapshot(source: session.source).text)
+                    #expect(editor.string.hasPrefix("Before\n\n\u{FFFC}") && editor.string.hasSuffix(after))
+                    #expect(editor.string.filter { $0.isNewline }.count == 3)
+                    #expect(editor.selectedRange() == NSRange(location: rule + 1, length: 0))
+                    session.undoManager.undo()
+                    #expect(session.source == source)
+                }
+            }
+        }
+    }
+
+    @Test func returnBeforeRuleInsertsBlankLineAboveIt() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for (prefix, marker) in [("", "***"), ("", "---"), ("", "___"), ("> ", "***")] {
+                let source = prefix + "Before" + newline + prefix + newline + prefix + marker + newline + prefix + "After"
+                let expected = prefix + "Before" + newline + prefix + newline + prefix + newline + prefix + marker + newline + prefix + "After"
+                let session = DocumentSession(source: source)
+                session.undoManager.groupsByEvent = false
+                session.renderNow()
+                let controller = MarkdownEditorController(session: session)
+                _ = controller.view
+                let editor = controller.textView!
+                let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+                editor.setSelectedRange(NSRange(location: rule, length: 0))
+                for count in 1...2 {
+                    session.undoManager.beginUndoGrouping()
+                    editor.insertNewline(nil)
+                    session.undoManager.endUndoGrouping()
+                    #expect(editor.selectedRange() == NSRange(location: rule + count, length: 0))
+                    #expect((editor.string as NSString).character(at: rule + count) == 0xFFFC)
+                }
+                session.undoManager.undo()
+                #expect(session.source == expected)
+                #expect(editor.selectedRange() == NSRange(location: rule + 1, length: 0))
+                session.undoManager.undo()
+                #expect(session.source == source)
+            }
+        }
+    }
+
+    @Test func horizontalRuleDeletionPreservesOtherEditingModes() {
+        for forward in [false, true] {
+            let source = "Before\n\n---\nAfter"
+            let session = DocumentSession(source: source)
+            session.renderNow()
+            let controller = MarkdownEditorController(session: session)
+            _ = controller.view
+            controller.mode = .source
+            let editor = controller.textView!
+            let marker = (source as NSString).range(of: "---")
+            editor.setSelectedRange(NSRange(location: forward ? marker.location : NSMaxRange(marker), length: 0))
+            if forward { editor.deleteForward(nil) }
+            else { editor.deleteBackward(nil) }
+            #expect(session.source == "Before\n\n--\nAfter")
+            session.undoManager.undo()
+            #expect(session.source == source)
+        }
+        let source = "Before\n\n\n---\nAfter"
+        let session = DocumentSession(source: source)
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        _ = controller.view
+        let editor = controller.textView!
+        let character = (editor.string as NSString).range(of: "\u{FFFC}").location
+        editor.setSelectedRange(NSRange(location: character, length: 0))
+        editor.deleteBackward(nil)
+        session.renderNow()
+        #expect(session.source == "Before\n\n---\nAfter")
+        #expect(editor.string.contains("\u{FFFC}"))
+        let unchanged = session.source
+        let rule = (editor.string as NSString).range(of: "\u{FFFC}").location
+        controller.canEdit = false
+        editor.setSelectedRange(NSRange(location: rule + 2, length: 0))
+        editor.deleteBackward(nil)
+        editor.setSelectedRange(NSRange(location: rule, length: 0))
+        editor.deleteForward(nil)
+        #expect(session.source == unchanged)
     }
 
     @Test func thematicBreaksRenderFullWidthAndRemainEditable() throws {
@@ -392,7 +976,53 @@ import EditorKit
         window.contentViewController = nil
     }
 
+    @Test func sourceToRichSwitchUsesFinalLayoutBeforeRestoringViewport() async throws {
+        _ = NSApplication.shared
+        let source = (0..<90).map { "## Section \($0)\n\nParagraph \($0) **bold** and more text.\n\n***\n\n" }.joined()
+        let session = DocumentSession(source: source)
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        let editor = controller.textView!
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil); window.contentViewController = nil }
+        controller.view.layoutSubtreeIfNeeded()
+        controller.mode = .source
+        let layout = try #require(editor.layoutManager)
+        let container = try #require(editor.textContainer)
+        let clip = try #require(editor.enclosingScrollView?.contentView)
+        editor.setSelectedRange(NSRange(location: 0, length: 0))
+        editor.insertText("x", replacementRange: editor.selectedRange())
+        layout.ensureLayout(for: container)
+        editor.sizeToFit()
+        let word = "Section 55"
+        func lineY() -> CGFloat {
+            layout.ensureLayout(for: container)
+            let character = (editor.string as NSString).range(of: word).location
+            let glyph = layout.glyphIndexForCharacter(at: character)
+            return layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + editor.textContainerOrigin.y
+        }
+        editor.scroll(NSPoint(x: 0, y: lineY()))
+        let selection = controller.selectedSourceRange()
+        controller.mode = .richText
+        #expect(session.renderSnapshot?.source == session.source)
+        #expect(editor.string == MarkdownRenderer.snapshot(source: session.source).text)
+        #expect(abs(lineY() - clip.bounds.minY) < 1)
+        let immediate = clip.bounds.origin
+        await session.waitForRendering()
+        window.displayIfNeeded()
+        #expect(abs(clip.bounds.minY - immediate.y) < 1)
+        #expect(controller.selectedSourceRange() == selection)
+    }
+
     @Test func modeSwitchKeepsVisibleContentInsteadOfFollowingCaret() throws {
+        @MainActor final class Scrolls {
+            let clip: NSClipView
+            var origins: [NSPoint] = []
+            init(clip: NSClipView) { self.clip = clip }
+        }
         _ = NSApplication.shared
         let source = (0..<90).map { "## Section \($0)\n\nParagraph \($0) **bold** and more text.\n\n- List item \($0)\n\n" }.joined()
         let session = DocumentSession(source: source)
@@ -403,9 +1033,18 @@ import EditorKit
         controller.view.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
         controller.view.layoutSubtreeIfNeeded()
         let editor = controller.textView!
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil) }
         let layout = try #require(editor.layoutManager)
         let container = try #require(editor.textContainer)
         let clip = try #require(editor.enclosingScrollView?.contentView)
+        clip.postsBoundsChangedNotifications = true
+        let scrolls = Scrolls(clip: clip)
+        let token = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: nil) { _ in
+            MainActor.assumeIsolated { scrolls.origins.append(scrolls.clip.bounds.origin) }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
         func lineY(_ word: String) -> CGFloat {
             layout.ensureLayout(for: container)
             let range = (editor.string as NSString).range(of: word)
@@ -418,8 +1057,12 @@ import EditorKit
             editor.scroll(NSPoint(x: 0, y: top))
             let sourceSelection = controller.selectedSourceRange()
             for mode in [EditorMode.source, .richText, .source, .richText] {
+                let previous = clip.bounds.origin
+                scrolls.origins.removeAll()
                 controller.mode = mode
+                window.displayIfNeeded()
                 #expect(abs(lineY(word) - clip.bounds.minY) < 1)
+                #expect(scrolls.origins.allSatisfy { abs($0.y - previous.y) < 1 || abs($0.y - clip.bounds.minY) < 1 }, "intermediate scrolls: \(scrolls.origins)")
                 #expect(controller.selectedSourceRange() == sourceSelection)
             }
         }
@@ -441,6 +1084,58 @@ import EditorKit
         controller.mode = .richText
         #expect(abs(clip.bounds.minY - (richY + height / 3)) < 1)
         window.contentViewController = nil
+    }
+
+    @Test func sourceToRichSwitchDoesNotClampToShorterDocumentEnd() async throws {
+        @MainActor final class Scrolls {
+            let clip: NSClipView
+            var origins: [NSPoint] = []
+            init(clip: NSClipView) { self.clip = clip }
+        }
+        _ = NSApplication.shared
+        let destination = "https://example.com/" + String(repeating: "long-path/", count: 40)
+        let source = (0..<90).map { "## Section \($0)\n\n[Link \($0)](\(destination))\n\nParagraph \($0).\n\n" }.joined()
+        let session = DocumentSession(source: source)
+        session.renderNow()
+        let controller = MarkdownEditorController(session: session)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 320), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        let editor = controller.textView!
+        window.makeFirstResponder(editor)
+        defer { window.orderOut(nil); window.contentViewController = nil }
+        controller.view.layoutSubtreeIfNeeded()
+        let layout = try #require(editor.layoutManager)
+        let container = try #require(editor.textContainer)
+        let clip = try #require(editor.enclosingScrollView?.contentView)
+        clip.postsBoundsChangedNotifications = true
+        let scrolls = Scrolls(clip: clip)
+        let token = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: nil) { _ in
+            MainActor.assumeIsolated { scrolls.origins.append(scrolls.clip.bounds.origin) }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+        func lineY(_ word: String) -> CGFloat {
+            layout.ensureLayout(for: container)
+            let character = (editor.string as NSString).range(of: word).location
+            return layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: character), effectiveRange: nil).minY + editor.textContainerOrigin.y
+        }
+        for word in ["Section 35", "Paragraph 70"] {
+            controller.mode = .source
+            editor.setSelectedRange(NSRange(location: 0, length: 0))
+            let top = lineY(word)
+            editor.sizeToFit()
+            editor.scroll(NSPoint(x: 0, y: top))
+            let previous = clip.bounds.origin
+            scrolls.origins.removeAll()
+            controller.mode = .richText
+            let target = lineY(word)
+            #expect(abs(clip.bounds.minY - target) < 1)
+            #expect(scrolls.origins.allSatisfy { abs($0.y - previous.y) < 1 || abs($0.y - target) < 1 }, "intermediate scrolls: \(scrolls.origins)")
+            await Task.yield()
+            window.displayIfNeeded()
+            #expect(abs(clip.bounds.minY - target) < 1)
+            #expect(editor.selectedRange() == NSRange(location: 0, length: 0))
+        }
     }
 
     @Test func italicIsVisibleForLatinAndChinese() throws {
@@ -741,7 +1436,8 @@ import EditorKit
                     if replacement == "\n" { controller.textView.insertNewline(nil) }
                     else { controller.textView.insertText(replacement, replacementRange: controller.textView.selectedRange()) }
                     session.undoManager.endUndoGrouping()
-                    let expectedSource = source.replacingOccurrences(of: "hello", with: replacement + "hello")
+                    let expectedSource = mode == .richText && source == "# hello" && replacement == "\n"
+                        ? "\n" + source : source.replacingOccurrences(of: "hello", with: replacement + "hello")
                     #expect(session.source == expectedSource)
                     let immediate = try #require(controller.textView.textStorage?.copy() as? NSAttributedString)
                     let caret = controller.textView.selectedRange()
@@ -1411,6 +2107,33 @@ import EditorKit
         }
     }
 
+    @Test func emptyMarkedTextDoesNotLeaveFormattingDisabled() throws {
+        let source = "Before\n\n| A | B |\n| --- | --- |\n| one | two |"
+        for mode in [EditorMode.richText, .source] {
+            for preedit in ["", "拼"] {
+                let session = DocumentSession(source: source)
+                session.renderNow()
+                let controller = MarkdownEditorController(session: session)
+                _ = controller.view
+                controller.mode = mode
+                let editor = controller.textView!
+                let offset = (editor.string as NSString).range(of: "one").location
+                editor.setSelectedRange(NSRange(location: offset, length: 0))
+                if !preedit.isEmpty {
+                    editor.setMarkedText(preedit, selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+                    #expect(editor.isComposing && editor.hasMarkedText())
+                    #expect(controller.formattingState(.tableDelete) == .unavailable)
+                }
+                editor.setMarkedText("", selectedRange: NSRange(location: 0, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+                #expect(!editor.hasMarkedText())
+                #expect(!editor.isComposing)
+                #expect(controller.formattingState(.tableDelete) == .off)
+                #expect(controller.formattingState(.bold) == .off)
+                #expect(session.source == source)
+            }
+        }
+    }
+
     @Test func compositionDoesNotRenderMarkedText() {
         let session = DocumentSession(source: "**ab**")
         session.renderNow()
@@ -1471,6 +2194,8 @@ import EditorKit
             let controller = MarkdownEditorController(session: session)
             _ = controller.view
             #expect(controller.insertMarkdown("![alt](image.png)"))
+            #expect(session.renderSnapshot?.source == session.source)
+            #expect(controller.textView.string == session.renderSnapshot?.text)
         }
     }
 
@@ -1518,6 +2243,80 @@ import EditorKit
         session.renderNow()
         let separator = session.renderSnapshot!.sourceMap.segments.first { $0.kind == .tableSeparator }!
         #expect(!session.editRendered(range: separator.displayedNSRange, replacement: ""))
+    }
+
+    @Test func pastedImageAndThumbnailKeepVisibleContentStable() async throws {
+        @MainActor final class ScrollChanges {
+            var origins: [CGFloat] = []
+        }
+        for delayedImage in [false, true] {
+            let section = "## Heading\n\nParagraph **bold** and *italic* text.\n\n"
+            let source = "![old](old.png)\n\n" + String(repeating: section, count: 40) + "Paste here\n\n" + String(repeating: section, count: 40)
+            let session = DocumentSession(source: source)
+            session.renderNow()
+            let controller = MarkdownEditorController(session: session)
+            let image = NSImage(size: NSSize(width: 720, height: 1000))
+            if !delayedImage { controller.imageProvider = { _ in image } }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentViewController = controller
+            window.makeKeyAndOrderFront(nil)
+            defer { window.orderOut(nil); window.contentViewController = nil }
+            controller.view.layoutSubtreeIfNeeded()
+            let editor = controller.textView!
+            window.makeFirstResponder(editor)
+            let layout = try #require(editor.layoutManager)
+            let container = try #require(editor.textContainer)
+            let scroll = try #require(editor.enclosingScrollView)
+            let clip = scroll.contentView
+            layout.ensureLayout(for: container)
+            editor.sizeToFit()
+            let insertion = (editor.string as NSString).range(of: "Paste here").location
+            editor.setSelectedRange(NSRange(location: insertion, length: 0))
+            let glyph = layout.glyphIndexForCharacter(at: insertion)
+            let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            clip.scroll(to: NSPoint(x: 0, y: line.minY + editor.textContainerOrigin.y - 220))
+            scroll.reflectScrolledClipView(clip)
+            let origin = clip.bounds.minY
+            let visibleGlyph = layout.glyphIndex(for: NSPoint(x: container.lineFragmentPadding, y: origin - editor.textContainerOrigin.y + 8), in: container)
+            let anchor = layout.characterIndexForGlyph(at: visibleGlyph)
+            func anchorPosition() -> CGFloat {
+                layout.ensureLayout(for: container)
+                editor.sizeToFit()
+                let glyph = layout.glyphIndexForCharacter(at: anchor)
+                return layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + editor.textContainerOrigin.y - clip.bounds.minY
+            }
+            let position = anchorPosition()
+            let changes = ScrollChanges()
+            clip.postsBoundsChangedNotifications = true
+            let token = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: nil) { _ in
+                MainActor.assumeIsolated { changes.origins.append(clip.bounds.minY) }
+            }
+            defer { NotificationCenter.default.removeObserver(token) }
+            controller.onImportImages = { _, _ in
+                let range = controller.selectedSourceRange()
+                #expect(controller.insertMarkdown("![pasted](pasted.png)", in: range))
+            }
+            let board = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+            defer { board.releaseGlobally() }
+            board.setData(Data([1, 2, 3]), forType: .png)
+            #expect(editor.readSelection(from: board, type: .png))
+            #expect(session.renderSnapshot?.source == session.source)
+            #expect(abs(anchorPosition() - position) < 1)
+            #expect(changes.origins.allSatisfy { abs($0 - origin) < 1 })
+            await session.waitForRendering()
+            #expect(abs(anchorPosition() - position) < 1)
+            changes.origins.removeAll()
+            if delayedImage { controller.imageProvider = { _ in image } }
+            let loadedOrigin = clip.bounds.minY
+            #expect(abs(anchorPosition() - position) < 1)
+            #expect(changes.origins.allSatisfy { abs($0 - origin) < 1 || abs($0 - loadedOrigin) < 1 })
+            await Task.yield()
+            #expect(abs(anchorPosition() - position) < 1)
+            session.undoManager.undo()
+            #expect(session.source == source)
+            session.undoManager.redo()
+            #expect(session.source.contains("![pasted](pasted.png)Paste here"))
+        }
     }
 
     @Test func imagesUseImportHookAndReadonlyBlocksIt() {

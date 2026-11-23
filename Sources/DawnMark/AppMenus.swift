@@ -3,6 +3,14 @@ import DawnMarkSupport
 import EditorKit
 
 @MainActor extension AppDelegate: NSMenuItemValidation, NSMenuDelegate {
+    var tableCommandGroups: [[(TextKey, FormattingCommand)]] {
+        [
+            [(.insertRowAbove, .tableInsertRowAbove), (.insertRowBelow, .tableInsertRow), (.deleteRow, .tableDeleteRow)],
+            [(.insertColumnLeft, .tableInsertColumnBefore), (.insertColumnRight, .tableInsertColumn), (.deleteColumn, .tableDeleteColumn)],
+            [(.deleteTable, .tableDelete)]
+        ]
+    }
+
     func buildMenus() {
         let main = NSMenu()
         func menu(_ title: String) -> NSMenu {
@@ -57,13 +65,15 @@ import EditorKit
         command(format, .unordered, .unorderedList); command(format, .ordered, .orderedList); command(format, .tasks, .taskList)
         format.addItem(.separator())
         command(format, .quote, .quote); command(format, .indent, .indent); command(format, .outdent, .outdent)
-        format.addItem(.separator())
-        command(format, .addRow, .tableInsertRow); command(format, .deleteRow, .tableDeleteRow); command(format, .addColumn, .tableInsertColumn); command(format, .deleteColumn, .tableDeleteColumn)
-        command(format, .deleteTable, .tableDelete)
         format.addItem(.separator()); command(format, .clearFormat, .clearFormatting)
         let insert = menu(L10n.text(.insert))
         add(insert, .link, #selector(insertLink(_:)), "k"); add(insert, .image, #selector(insertImage(_:))); add(insert, .table, #selector(insertTable(_:)))
         insert.addItem(.separator()); command(insert, .codeBlock, .codeBlock); command(insert, .rule, .horizontalRule)
+        let table = menu(L10n.text(.tableActions))
+        for (index, commands) in tableCommandGroups.enumerated() {
+            if index > 0 { table.addItem(.separator()) }
+            for (key, action) in commands { command(table, key, action) }
+        }
         let view = menu(L10n.text(.view))
         add(view, .richMode, #selector(changeMode(_:))); view.items.last?.tag = 0
         add(view, .sourceMode, #selector(changeMode(_:))); view.items.last?.tag = 1
@@ -86,12 +96,21 @@ import EditorKit
         let clear = NSMenuItem(title: L10n.text(.clearRecent), action: #selector(clearRecent(_:)), keyEquivalent: ""); clear.target = self; menu.addItem(clear)
     }
 
+    func validateLinkMenuItem(_ menuItem: NSMenuItem, document: MarkdownDocument?) -> Bool {
+        menuItem.title = L10n.text(document?.editor.currentLink == nil ? .link : .editLink)
+        return document != nil && commerce.canEdit && document?.editor.canEdit == true
+            && document?.editor.textView?.isComposing != true && document?.editor.textView?.hasMarkedText() != true
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let action = menuItem.action else { return false }
         let document = activeDocument
         if action == #selector(changeMode(_:)) {
             menuItem.state = document?.editor.mode == (menuItem.tag == 1 ? .source : .richText) ? .on : .off
             return document != nil
+        }
+        if action == #selector(insertLink(_:)) {
+            return validateLinkMenuItem(menuItem, document: document)
         }
         if action == #selector(newDocument(_:)) { return commerce.canEdit }
         if action == #selector(save(_:)) { return document?.isDocumentEdited == true }

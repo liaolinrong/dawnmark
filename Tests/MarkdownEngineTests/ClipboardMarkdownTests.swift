@@ -28,6 +28,8 @@ struct ClipboardMarkdownTests {
         #expect(extract("## Heading **bold**\n\nBody words", selecting: "Heading bold\n\nBody") == "## Heading **bold**\n\nBody")
         #expect(extract("# Heading ###\n\nBody", selecting: "Heading") == "# Heading ###")
         #expect(extract("Title\n=====\n\nBody", selecting: "Title") == "Title\n=====")
+        #expect(extract("哈哈\n---\n## Kivo **深度测评**\nBody", selecting: "哈哈") == "哈哈\n---")
+        #expect(extract("哈哈\n---\n## Kivo **深度测评**\nBody", selecting: "Kivo 深度测评") == "## Kivo **深度测评**")
         #expect(extract("## [Heading][target]\n\nBody\n\n[target]: https://example.com", selecting: "Heading") == "## [Heading](<https://example.com>)")
         #expect(extract("before [](https://example.com) after\n\nBody", selecting: "before  after") == "before [](https://example.com) after")
         #expect(extract("Before\n\nAfter", selecting: "\n\n") == "\n\n")

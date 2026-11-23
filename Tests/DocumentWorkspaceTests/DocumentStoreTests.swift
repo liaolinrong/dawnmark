@@ -30,6 +30,119 @@ import UniformTypeIdentifiers
     #expect(throws: DocumentStoreError.invalidImage) { try store.importImage(data: Data("bad".utf8), into: location) }
 }
 
+@Suite(.serialized) @MainActor struct SecurityScopedBookmarkTests {
+    @Test func sandboxEntitlementsMatchXcodeBuildSettings() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let entitlementURL = root.appendingPathComponent("Configuration/DawnMark.entitlements")
+        let entitlements = try #require(PropertyListSerialization.propertyList(from: Data(contentsOf: entitlementURL), format: nil) as? [String: Any])
+        for key in ["com.apple.security.app-sandbox", "com.apple.security.files.user-selected.read-write", "com.apple.security.files.bookmarks.app-scope"] {
+            #expect(entitlements[key] as? Bool == true)
+        }
+        let projectURL = root.appendingPathComponent("DawnMark.xcodeproj/project.pbxproj")
+        let project = try #require(PropertyListSerialization.propertyList(from: Data(contentsOf: projectURL), format: nil) as? [String: Any])
+        let objects = try #require(project["objects"] as? [String: [String: Any]])
+        let configurations = objects.values.compactMap { $0["buildSettings"] as? [String: Any] }.filter {
+            $0["CODE_SIGN_ENTITLEMENTS"] as? String == "Configuration/DawnMark.entitlements"
+        }
+        #expect(configurations.count == 2)
+        for settings in configurations {
+            #expect(settings["ENABLE_APP_SANDBOX"] as? String == "YES")
+            #expect(settings["ENABLE_USER_SELECTED_FILES"] as? String == "readwrite")
+        }
+    }
+
+    private func withStore(_ body: (SecurityScopedBookmarks, UserDefaults, URL) throws -> Void) throws {
+        let suite = "DawnMark.BookmarkTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try body(SecurityScopedBookmarks(defaults: defaults), defaults, root)
+    }
+
+    @Test func directoryGrantPersistsForDocumentsAndAssociatedImages() throws {
+        try withStore { bookmarks, defaults, root in
+            let location = try DocumentStore().create(name: "Notes", in: root)
+            let data = try documentStoreImageData()
+            let image = try DocumentStore().importImage(data: data, into: location)
+            try DocumentStore().save(image.markdown, to: location)
+            try bookmarks.remember(location.directoryURL)
+            let reopened = SecurityScopedBookmarks(defaults: defaults)
+            let directory = try #require(reopened.resolveDirectory(containing: location.markdownURL))
+            let access = directory.startAccessingSecurityScopedResource()
+            defer { if access { directory.stopAccessingSecurityScopedResource() } }
+            #expect(directory.standardizedFileURL == location.directoryURL.standardizedFileURL)
+            #expect(try DocumentStore().read(location) == image.markdown)
+            #expect(try Data(contentsOf: location.resourceURL(relativePath: image.relativePath)) == data)
+            try DocumentStore().save("Updated\n" + image.markdown, to: location)
+            #expect(try DocumentStore().read(location).hasPrefix("Updated\n"))
+        }
+    }
+
+    @Test func selectedFileGrantPersistsIndependentlyOfDirectoryGrant() throws {
+        try withStore { bookmarks, defaults, root in
+            let file = root.appendingPathComponent("note.md")
+            try Data("Original".utf8).write(to: file)
+            try bookmarks.remember(file)
+            let reopened = SecurityScopedBookmarks(defaults: defaults)
+            let resolved = try #require(reopened.resolve(file))
+            let access = resolved.startAccessingSecurityScopedResource()
+            defer { if access { resolved.stopAccessingSecurityScopedResource() } }
+            #expect(try String(contentsOf: resolved, encoding: .utf8) == "Original")
+            try Data("Updated".utf8).write(to: resolved, options: .atomic)
+            #expect(try String(contentsOf: resolved, encoding: .utf8) == "Updated")
+            #expect(reopened.resolveDirectory(containing: file) == nil)
+        }
+    }
+
+    @Test func parentGrantCoversNestedDocumentButNotSiblingDirectory() throws {
+        try withStore { bookmarks, defaults, root in
+            let allowed = root.appendingPathComponent("Allowed", isDirectory: true)
+            try FileManager.default.createDirectory(at: allowed, withIntermediateDirectories: true)
+            let location = try DocumentStore().create(name: "Nested", in: allowed)
+            try bookmarks.remember(allowed)
+            let reopened = SecurityScopedBookmarks(defaults: defaults)
+            #expect(reopened.resolveDirectory(containing: location.markdownURL)?.standardizedFileURL == allowed.standardizedFileURL)
+            #expect(reopened.resolveDirectory(containing: root.appendingPathComponent("Other/note.md")) == nil)
+        }
+    }
+
+    @Test func corruptedBookmarksDoNotGrantAccess() throws {
+        try withStore { bookmarks, defaults, root in
+            let file = root.appendingPathComponent("note.md")
+            defaults.set([root.standardizedFileURL.path: Data("invalid".utf8)], forKey: "directoryBookmarks")
+            #expect(bookmarks.resolve(root) == nil)
+            #expect(bookmarks.resolveDirectory(containing: file) == nil)
+        }
+    }
+
+    @Test func movedDirectoryBookmarkStillResolves() throws {
+        try withStore { bookmarks, defaults, root in
+            let original = root.appendingPathComponent("Original", isDirectory: true)
+            let moved = root.appendingPathComponent("Moved", isDirectory: true)
+            try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+            let location = try DocumentStore().create(name: "Notes", in: original)
+            let data = try documentStoreImageData()
+            let image = try DocumentStore().importImage(data: data, into: location)
+            try DocumentStore().save(image.markdown, to: location)
+            try bookmarks.remember(original)
+            try FileManager.default.moveItem(at: original, to: moved)
+            let reopened = SecurityScopedBookmarks(defaults: defaults)
+            let resolved = try #require(reopened.resolve(original))
+            #expect(resolved.standardizedFileURL == moved.standardizedFileURL)
+            let file = try #require(reopened.resolveFile(location.markdownURL))
+            let restored = DocumentLocation(markdownURL: file)
+            let access = resolved.startAccessingSecurityScopedResource()
+            defer { if access { resolved.stopAccessingSecurityScopedResource() } }
+            #expect(try DocumentStore().read(restored) == image.markdown)
+            #expect(try Data(contentsOf: restored.resourceURL(relativePath: image.relativePath)) == data)
+        }
+    }
+}
+
 private func documentStoreImageData(type: UTType = .png) throws -> Data {
     let pixels = Data([255, 32, 64, 255])
     let provider = try #require(CGDataProvider(data: pixels as CFData))

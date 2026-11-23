@@ -106,10 +106,8 @@ public struct SourceMap: Sendable {
             return next.sourceNSRange.location
         }
         if preferTrailing, let previous = editable.last(where: { NSMaxRange($0.displayedNSRange) == offset }) {
-            // Line starts inside quotes/lists belong after the container prefix, not before it.
-                if previous.kind == .lineBreak,
-                    let next = editable.first(where: { $0.displayedNSRange.location == offset }),
-                    !previous.continuationPrefix.isEmpty || !next.continuationPrefix.isEmpty,
+            if previous.kind == .lineBreak,
+               let next = editable.first(where: { $0.displayedNSRange.location == offset }),
                next.sourceNSRange.location > NSMaxRange(previous.sourceNSRange) {
                 return next.sourceNSRange.location
             }
@@ -141,11 +139,17 @@ public struct SourceMap: Sendable {
     }
 
     public func displayedOffset(forSourceOffset offset: Int) -> Int {
-        for segment in segments where segment.kind != .decoration && segment.kind != .tableSeparator {
-            if offset <= segment.sourceNSRange.location { return segment.displayedNSRange.location }
-            if offset < NSMaxRange(segment.sourceNSRange) {
-                return segment.displayedNSRange.location + (segment.isIdentity ? offset - segment.sourceNSRange.location : 0)
-            }
+        guard offset < sourceLength else { return displayedLength }
+        let editable = segments.filter { $0.kind != .decoration && $0.kind != .tableSeparator }
+        if let segment = editable.first(where: { NSLocationInRange(offset, $0.sourceNSRange) }) {
+            return segment.displayedNSRange.location + (segment.isIdentity ? offset - segment.sourceNSRange.location : 0)
+        }
+        if let previous = editable.last(where: { $0.isIdentity && NSMaxRange($0.sourceNSRange) == offset }),
+           segments.contains(where: { $0.kind == .tableSeparator && $0.displayedNSRange.location == NSMaxRange(previous.displayedNSRange) }) {
+            return NSMaxRange(previous.displayedNSRange)
+        }
+        if let next = editable.filter({ $0.sourceNSRange.location >= offset }).min(by: { $0.sourceNSRange.location < $1.sourceNSRange.location }) {
+            return next.displayedNSRange.location
         }
         return displayedLength
     }

@@ -5,6 +5,83 @@ import EditorKit
 import CoreText
 
 @Suite(.serialized) @MainActor struct StructuralEditingTests {
+    @Test func returnAtHeadingStartInsertsBlankLineWithoutRemovingHeading() throws {
+        for newline in ["\n", "\r\n", "\r"] {
+            let headings = (1...6).map { String(repeating: "#", count: $0) + " Kivo **深度测评**" }
+                + ["Kivo **深度测评**" + newline + "===", "Kivo **深度测评**" + newline + "---"]
+            for heading in headings {
+                for before in ["", "哈哈" + newline + newline] {
+                    let source = before + heading + newline + "Body"
+                    let session = DocumentSession(source: source)
+                    session.undoManager.groupsByEvent = false
+                    session.renderNow()
+                    let controller = MarkdownEditorController(session: session)
+                    _ = controller.view
+                    let editor = controller.textView!
+                    let initial = String(editor.string)
+                    let snapshot = try #require(session.renderSnapshot)
+                    let start = (initial as NSString).range(of: "Kivo").location
+                    let selection = NSRange(location: start, length: 0)
+                    editor.setSelectedRange(selection)
+                    session.undoManager.beginUndoGrouping()
+                    editor.insertNewline(nil)
+                    session.undoManager.endUndoGrouping()
+                    let expected = before + newline + heading + newline + "Body"
+                    #expect(session.source == expected)
+                    #expect(editor.string == (initial as NSString).replacingCharacters(in: selection, with: "\n"))
+                    #expect(editor.selectedRange() == NSRange(location: start + 1, length: 0))
+                    #expect(session.renderSnapshot?.headings.map(\.level) == snapshot.headings.map(\.level))
+                    session.undoManager.undo()
+                    #expect(session.source == source)
+                    #expect(editor.string == initial)
+                    #expect(editor.selectedRange() == selection)
+                    session.undoManager.redo()
+                    #expect(session.source == expected)
+                    #expect(editor.selectedRange() == NSRange(location: start + 1, length: 0))
+                    session.undoManager.beginUndoGrouping()
+                    editor.insertText("新", replacementRange: editor.selectedRange())
+                    session.undoManager.endUndoGrouping()
+                    session.renderNow()
+                    #expect(session.source == expected.replacingOccurrences(of: "Kivo", with: "新Kivo"))
+                    #expect(session.renderSnapshot?.headings.map(\.level) == snapshot.headings.map(\.level))
+                    session.undoManager.undo()
+                    #expect(session.source == expected)
+                    session.undoManager.beginUndoGrouping()
+                    editor.insertNewline(nil)
+                    session.undoManager.endUndoGrouping()
+                    #expect(session.source == before + newline + newline + heading + newline + "Body")
+                    #expect(editor.selectedRange() == NSRange(location: start + 2, length: 0))
+                }
+            }
+        }
+    }
+
+    @Test func headingStartReturnPreservesQuoteAndSourceMode() {
+        for prefix in ["", "> ", "> > "] {
+            for mode in [EditorMode.richText, .source] {
+                let source = prefix + "## Kivo **深度测评**\n" + prefix + "Body"
+                let session = DocumentSession(source: source)
+                session.renderNow()
+                let controller = MarkdownEditorController(session: session)
+                _ = controller.view
+                controller.mode = mode
+                let editor = controller.textView!
+                let location = (editor.string as NSString).range(of: "Kivo").location
+                editor.setSelectedRange(NSRange(location: location, length: 0))
+                editor.insertNewline(nil)
+                session.renderNow()
+                if mode == .richText {
+                    #expect(session.source == prefix + "\n" + source)
+                    #expect(session.renderSnapshot?.headings.map(\.level) == [2])
+                    #expect(editor.selectedRange() == NSRange(location: (editor.string as NSString).range(of: "Kivo").location, length: 0))
+                } else {
+                    let position = (source as NSString).range(of: "Kivo").location
+                    #expect(session.source == (source as NSString).replacingCharacters(in: NSRange(location: position, length: 0), with: "\n"))
+                }
+            }
+        }
+    }
+
     @Test func returnAfterApplyingQuoteShowsEditableNewLine() {
         for source in ["hello", "你好", "**hello**"] {
             let session = DocumentSession(source: source)
@@ -678,6 +755,53 @@ import CoreText
         #expect(rowSession.perform(.tableDeleteRow, in: (rowSession.source as NSString).range(of: "a\\|b")))
         #expect(!rowSession.source.contains("a\\|b"))
         #expect(rowSession.source.contains("| last | value |"))
+    }
+
+    @Test func directionalTableInsertionPreservesSourceAndUndo() {
+        for newline in ["\n", "\r\n", "\r"] {
+            for prefix in ["", "> "] {
+                let lines = ["| A | B |", "| :--- | ---: |", "| one | two |", "| last | value |"]
+                let source = lines.map { prefix + $0 }.joined(separator: newline)
+                let cases: [(FormattingCommand, String, [String])] = [
+                    (.tableInsertRowAbove, "one", [lines[0], lines[1], "|   |   |", lines[2], lines[3]]),
+                    (.tableInsertRow, "one", [lines[0], lines[1], lines[2], "|   |   |", lines[3]]),
+                    (.tableInsertRowAbove, "last", [lines[0], lines[1], lines[2], "|   |   |", lines[3]]),
+                    (.tableInsertRow, "last", lines + ["|   |   |"]),
+                    (.tableInsertColumnBefore, "one", ["|   | A | B |", "| --- | :--- | ---: |", "|   | one | two |", "|   | last | value |"]),
+                    (.tableInsertColumnBefore, "B", ["| A |   | B |", "| :--- | --- | ---: |", "| one |   | two |", "| last |   | value |"]),
+                    (.tableInsertColumn, "two", ["| A | B |   |", "| :--- | ---: | --- |", "| one | two |   |", "| last | value |   |"])
+                ]
+                for (command, word, expectedLines) in cases {
+                    let session = DocumentSession(source: source)
+                    session.undoManager.groupsByEvent = false
+                    let selection = (source as NSString).range(of: word)
+                    #expect(session.formattingState(command, in: selection) == .off)
+                    session.undoManager.beginUndoGrouping()
+                    #expect(session.perform(command, in: selection))
+                    session.undoManager.endUndoGrouping()
+                    let expected = expectedLines.map { prefix + $0 }.joined(separator: newline)
+                    #expect(session.source == expected)
+                    session.renderNow()
+                    #expect(!session.renderSnapshot!.tableCells.isEmpty)
+                    session.undoManager.undo()
+                    #expect(session.source == source)
+                    session.undoManager.redo()
+                    #expect(session.source == expected)
+                    session.canEdit = false
+                    #expect(!session.perform(command, in: selection))
+                    #expect(session.formattingState(command, in: selection) == .unavailable)
+                }
+                let session = DocumentSession(source: source)
+                #expect(session.formattingState(.tableInsertRowAbove, in: (source as NSString).range(of: "A")) == .unavailable)
+                #expect(!session.perform(.tableInsertRowAbove, in: (source as NSString).range(of: "A")))
+                #expect(session.source == source)
+            }
+        }
+        let plain = DocumentSession(source: "plain")
+        for command in [FormattingCommand.tableInsertRowAbove, .tableInsertColumnBefore] {
+            #expect(plain.formattingState(command) == .unavailable)
+            #expect(!plain.perform(command))
+        }
     }
 
     @Test func tableBoundaryProtectionAndCRLF() {

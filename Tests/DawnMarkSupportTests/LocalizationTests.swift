@@ -61,6 +61,45 @@ import Testing
     #expect(other.stringArray(forKey: "AppleLanguages") == ["ja"])
 }
 
+@Test func linkActionsAreLocalizedInEveryLanguage() {
+    let expected: [AppLanguage: [String]] = [
+        .english: ["Edit Link...", "Open Link", "Copy Link Address", "Remove Link"],
+        .simplifiedChinese: ["编辑链接...", "打开链接", "复制链接地址", "移除链接"],
+        .traditionalChinese: ["編輯連結...", "開啟連結", "複製連結位址", "移除連結"],
+        .japanese: ["リンクを編集...", "リンクを開く", "リンク先をコピー", "リンクを解除"],
+        .korean: ["링크 편집...", "링크 열기", "링크 주소 복사", "링크 제거"],
+        .french: ["Modifier le lien...", "Ouvrir le lien", "Copier l'adresse du lien", "Supprimer le lien"],
+        .german: ["Link bearbeiten...", "Link öffnen", "Link-Adresse kopieren", "Link entfernen"],
+        .spanish: ["Editar enlace...", "Abrir enlace", "Copiar dirección del enlace", "Eliminar enlace"],
+        .brazilianPortuguese: ["Editar link...", "Abrir link", "Copiar endereço do link", "Remover link"],
+        .portuguese: ["Editar ligação...", "Abrir ligação", "Copiar endereço da ligação", "Remover ligação"],
+        .italian: ["Modifica link...", "Apri link", "Copia indirizzo del link", "Rimuovi link"],
+        .dutch: ["Link bewerken...", "Link openen", "Linkadres kopiëren", "Link verwijderen"],
+        .polish: ["Edytuj link...", "Otwórz link", "Kopiuj adres linku", "Usuń link"],
+        .turkish: ["Bağlantıyı düzenle...", "Bağlantıyı aç", "Bağlantı adresini kopyala", "Bağlantıyı kaldır"],
+        .indonesian: ["Edit tautan...", "Buka tautan", "Salin alamat tautan", "Hapus tautan"]
+    ]
+    #expect(Set(expected.keys) == Set(AppLanguage.allCases))
+    for language in AppLanguage.allCases {
+        #expect([TextKey.editLink, .openLink, .copyLinkAddress, .removeLink].map { L10n.text($0, language: language) } == expected[language])
+    }
+}
+
+@Test func linkDisplayTextLabelIsLocalizedInEveryLanguage() {
+    let expected: [AppLanguage: String] = [
+        .english: "Display text:", .simplifiedChinese: "显示文字：", .traditionalChinese: "顯示文字：",
+        .japanese: "表示テキスト：", .korean: "표시 텍스트:", .french: "Texte à afficher :",
+        .german: "Anzeigetext:", .spanish: "Texto para mostrar:", .brazilianPortuguese: "Texto de exibição:",
+        .portuguese: "Texto a apresentar:", .italian: "Testo da visualizzare:", .dutch: "Weergavetekst:",
+        .polish: "Wyświetlany tekst:", .turkish: "Görünen metin:", .indonesian: "Teks tampilan:"
+    ]
+    #expect(Set(expected.keys) == Set(AppLanguage.allCases))
+    for language in AppLanguage.allCases {
+        #expect(L10n.text(.linkText, language: language) == expected[language])
+        #expect(L10n.text(.linkText, language: language) != L10n.text(.linkAddress, language: language))
+    }
+}
+
 @Test func everyLanguageHasEveryKey() {
     let expected = Set(TextKey.allCases.map(\.rawValue))
     for language in AppLanguage.allCases {
@@ -83,7 +122,32 @@ import Testing
     }
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let menus = try String(contentsOf: root.appendingPathComponent("Sources/DawnMark/AppMenus.swift"), encoding: .utf8)
-    #expect(menus.contains("command(format, .deleteTable, .tableDelete)"))
+    #expect(menus.contains("(.deleteTable, .tableDelete)"))
+    #expect(!menus.contains("command(format, .deleteTable, .tableDelete)"))
+}
+
+@Test func directionalTableActionsAreLocalizedInEveryLanguage() {
+    let expected: [AppLanguage: [String]] = [
+        .english: ["Insert Row Above", "Insert Row Below", "Insert Column to the Left", "Insert Column to the Right"],
+        .simplifiedChinese: ["上方插入行", "下方插入行", "左侧插入列", "右侧插入列"],
+        .traditionalChinese: ["上方插入列", "下方插入列", "左側插入欄", "右側插入欄"],
+        .japanese: ["上に行を挿入", "下に行を挿入", "左に列を挿入", "右に列を挿入"],
+        .korean: ["위에 행 삽입", "아래에 행 삽입", "왼쪽에 열 삽입", "오른쪽에 열 삽입"],
+        .french: ["Insérer une ligne au-dessus", "Insérer une ligne en dessous", "Insérer une colonne à gauche", "Insérer une colonne à droite"],
+        .german: ["Zeile oberhalb einfügen", "Zeile unterhalb einfügen", "Spalte links einfügen", "Spalte rechts einfügen"],
+        .spanish: ["Insertar fila arriba", "Insertar fila abajo", "Insertar columna a la izquierda", "Insertar columna a la derecha"],
+        .brazilianPortuguese: ["Inserir linha acima", "Inserir linha abaixo", "Inserir coluna à esquerda", "Inserir coluna à direita"],
+        .portuguese: ["Inserir linha acima", "Inserir linha abaixo", "Inserir coluna à esquerda", "Inserir coluna à direita"],
+        .italian: ["Inserisci riga sopra", "Inserisci riga sotto", "Inserisci colonna a sinistra", "Inserisci colonna a destra"],
+        .dutch: ["Rij hierboven invoegen", "Rij hieronder invoegen", "Kolom links invoegen", "Kolom rechts invoegen"],
+        .polish: ["Wstaw wiersz powyżej", "Wstaw wiersz poniżej", "Wstaw kolumnę z lewej", "Wstaw kolumnę z prawej"],
+        .turkish: ["Üste Satır Ekle", "Alta Satır Ekle", "Sola Sütun Ekle", "Sağa Sütun Ekle"],
+        .indonesian: ["Sisipkan Baris di Atas", "Sisipkan Baris di Bawah", "Sisipkan Kolom di Kiri", "Sisipkan Kolom di Kanan"]
+    ]
+    #expect(Set(expected.keys) == Set(AppLanguage.allCases))
+    for language in AppLanguage.allCases {
+        #expect([TextKey.insertRowAbove, .insertRowBelow, .insertColumnLeft, .insertColumnRight].map { L10n.text($0, language: language) } == expected[language])
+    }
 }
 
 @Test func listIndentRestrictionExplainsBothModesInEveryLanguage() {

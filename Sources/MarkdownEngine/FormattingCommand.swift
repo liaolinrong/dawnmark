@@ -7,13 +7,52 @@ public enum FormattingCommand: Sendable {
     case bold, italic, strikethrough, inlineCode
     case unorderedList, orderedList, taskList, quote, codeBlock, horizontalRule
     case indent, outdent, clearFormatting
-    case insertLink(destination: String)
+    case insertLink(destination: String, label: String? = nil)
     case insertImage(path: String)
     case insertTable(columns: Int = 2, rows: Int = 2)
     case tableInsertRow, tableDeleteRow, tableInsertColumn, tableDeleteColumn, tableDelete
+    case tableInsertRowAbove, tableInsertColumnBefore
+}
+
+public struct MarkdownLinkContext: Sendable {
+    public let sourceRange: NSRange
+    public let labelSourceRange: NSRange
+    public let displayText: String
+    public let destination: String
 }
 
 extension DocumentSession {
+    public func link(in selection: NSRange) -> MarkdownLinkContext? {
+        guard Range(selection, in: source) != nil else { return nil }
+        let coordinates = SourceCoordinates(source: source)
+        var result: MarkdownLinkContext?
+        func visit(_ node: Markup) {
+            if let link = node as? Markdown.Link, let outer = coordinates.nsRange(link.range),
+               outer.location <= selection.location, selection.location < NSMaxRange(outer),
+               NSMaxRange(selection) <= NSMaxRange(outer), let destination = link.destination {
+                let label: NSRange
+                if let first = link.child(at: 0), let last = link.child(at: link.childCount - 1),
+                   let start = coordinates.nsRange(first.range), let end = coordinates.nsRange(last.range) {
+                    label = NSRange(location: start.location, length: NSMaxRange(end) - start.location)
+                } else {
+                    label = NSRange(location: outer.location + 1, length: 0)
+                }
+                result = MarkdownLinkContext(sourceRange: outer, labelSourceRange: label,
+                                             displayText: link.plainText, destination: destination)
+            }
+            for child in node.children { visit(child) }
+        }
+        visit(MarkdownParser.parse(source))
+        return result
+    }
+
+    @discardableResult public func removeLink(in selection: NSRange) -> Bool {
+        guard canEdit, let link = link(in: selection) else { return false }
+        let label = (source as NSString).substring(with: link.labelSourceRange)
+        return apply([SourcePatch(range: link.sourceRange, replacement: label)],
+                     selectionAfter: NSRange(location: link.sourceRange.location, length: label.utf16.count))
+    }
+
     @discardableResult public func indentList(in selection: NSRange, outdent: Bool) -> Bool {
         guard Range(selection, in: source) != nil else { return false }
         let coordinates = SourceCoordinates(source: source)
@@ -47,7 +86,7 @@ extension DocumentSession {
         guard formattingState(command, in: selection) != .unavailable else { return false }
         let selected = String(source[selectedRange])
         switch command {
-        case .tableInsertRow, .tableDeleteRow, .tableInsertColumn, .tableDeleteColumn, .tableDelete:
+        case .tableInsertRow, .tableInsertRowAbove, .tableDeleteRow, .tableInsertColumn, .tableInsertColumnBefore, .tableDeleteColumn, .tableDelete:
             return editTable(command, selection: selection)
         case .bold: return toggleInline(selection, marker: "**", matches: { $0 is Strong })
         case .italic: return toggleInline(selection, marker: "*", matches: { $0 is Emphasis })
@@ -58,9 +97,10 @@ extension DocumentSession {
             let marker = String(repeating: "`", count: longestRun(of: "`", in: selected) + 1)
             let padded = selected.hasPrefix("`") || selected.hasSuffix("`") || (selected.hasPrefix(" ") && selected.hasSuffix(" ") && !selected.allSatisfy({ $0 == " " }))
             return wrap(selection, prefix: marker + (padded ? " " : ""), suffix: (padded ? " " : "") + marker)
-        case .insertLink(let destination):
-            if replaceDestination(in: selection, destination: destination, image: false) { return true }
-            let label = escapedLinkLabel(selected)
+        case .insertLink(let destination, let displayText):
+            let explicitLabel = displayText.map { $0.isEmpty ? destination : $0 }
+            if replaceDestination(in: selection, destination: destination, image: false, displayText: explicitLabel) { return true }
+            let label = explicitLabel.map(SourceMap.escapeText) ?? (selected.isEmpty ? SourceMap.escapeText(destination) : escapedLinkLabel(selected))
             let replacement = "[" + label + "](<\(escapedDestination(destination))>)"
             let parsed = MarkdownParser.parse(replacement)
             guard parsed.childCount == 1, let paragraph = parsed.child(at: 0) as? Paragraph,
@@ -71,13 +111,13 @@ extension DocumentSession {
             return apply([SourcePatch(range: selection, replacement: "![\(SourceMap.escapeText(selected))](<\(escapedDestination(path))>)")])
         case .horizontalRule:
             let newline = source.contains("\r\n") ? "\r\n" : source.contains("\r") && !source.contains("\n") ? "\r" : "\n"
-            return insertSeparatedBlock("---", in: selection, newline: newline)
+            return insertSeparatedBlock("***", in: selection, newline: newline)
         case .insertTable(let columns, let rows):
             guard columns > 0, columns <= 64, rows > 0, rows <= 1000 else { return false }
             let newline = source.contains("\r\n") ? "\r\n" : source.contains("\r") && !source.contains("\n") ? "\r" : "\n"
             let row = "|" + String(repeating: "   |", count: columns)
             let delimiter = "|" + String(repeating: " --- |", count: columns)
-            let table = ([row, delimiter] + Array(repeating: row, count: rows)).joined(separator: newline)
+            let table = ([row, delimiter] + Array(repeating: row, count: rows - 1)).joined(separator: newline)
             return insertSeparatedBlock(table, in: selection, newline: newline)
         case .codeBlock:
             let fence = String(repeating: "`", count: max(3, longestRun(of: "`", in: selected) + 1))
@@ -99,7 +139,7 @@ extension DocumentSession {
         return apply([SourcePatch(range: selection, replacement: replacement)])
     }
 
-    private func replaceDestination(in selection: NSRange, destination: String, image: Bool) -> Bool {
+    private func replaceDestination(in selection: NSRange, destination: String, image: Bool, displayText: String? = nil) -> Bool {
         let coordinates = SourceCoordinates(source: source)
         var candidate: Markup?
         func visit(_ node: Markup) {
@@ -123,10 +163,12 @@ extension DocumentSession {
             " \"" + $0.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         } ?? ""
         let prefix = image ? "![" : "["
-        let replacement = prefix + (source as NSString).substring(with: label) + "](<\(escapedDestination(destination))>\(escapedTitle))"
+        let labelText = displayText.map(SourceMap.escapeText) ?? (source as NSString).substring(with: label)
+        let replacement = prefix + labelText + "](<\(escapedDestination(destination))>\(escapedTitle))"
         let start = max(label.location, min(selection.location, NSMaxRange(label)))
         let end = max(start, min(NSMaxRange(selection), NSMaxRange(label)))
         let selectionAfter = image ? NSRange(location: outer.location, length: replacement.utf16.count)
+            : displayText != nil ? NSRange(location: outer.location + prefix.utf16.count, length: labelText.utf16.count)
             : NSRange(location: outer.location + prefix.utf16.count + start - label.location, length: end - start)
         return apply([SourcePatch(range: outer, replacement: replacement)], selectionAfter: selectionAfter)
     }

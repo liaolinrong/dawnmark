@@ -50,6 +50,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Configuration/DawnMark.entitlements
         CODE_SIGN_STYLE: Automatic
         ENABLE_APP_SANDBOX: YES
+        ENABLE_USER_SELECTED_FILES: readwrite
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
     dependencies:

@@ -10,7 +10,7 @@ extension DocumentSession {
         let selection = selection ?? selectedSourceRange
         guard Range(selection, in: source) != nil else { return .unavailable }
         switch command {
-        case .tableInsertRow, .tableDeleteRow, .tableInsertColumn, .tableDeleteColumn, .tableDelete:
+        case .tableInsertRow, .tableInsertRowAbove, .tableDeleteRow, .tableInsertColumn, .tableInsertColumnBefore, .tableDeleteColumn, .tableDelete:
             return canEdit && editTable(command, selection: selection, checkingOnly: true) ? .off : .unavailable
         case .heading(let level) where !(1...6).contains(level): return .unavailable
         default: break

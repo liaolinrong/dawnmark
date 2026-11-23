@@ -47,8 +47,16 @@ private struct Extractor {
         }
     }
 
-    func span(_ node: Markup) -> NSRange? {
+    func range(_ node: Markup) -> NSRange? {
         guard let sourceRange = coordinates.nsRange(node.range) else { return nil }
+        if node is Heading {
+            return snapshot.headings.first(where: { $0.sourceRange.location == sourceRange.location })?.sourceRange ?? sourceRange
+        }
+        return sourceRange
+    }
+
+    func span(_ node: Markup) -> NSRange? {
+        guard let sourceRange = range(node) else { return nil }
         if let container = snapshot.sourceMap.containers.first(where: { $0.sourceNSRange == sourceRange }) {
             return container.displayedNSRange
         }
@@ -110,7 +118,7 @@ private struct Extractor {
         if selected == bounds, !(node is Markdown.Text), !(node is Table.Cell),
            !(node is Table.Row), !(node is Table.Head), !(node is Table.Body),
               !needsLinkDefinition(node),
-           var sourceRange = coordinates.nsRange(node.range) {
+           var sourceRange = range(node) {
             let mappedEnd = segments(in: sourceRange)
                 .filter { NSIntersectionRange(selected, $0.displayedNSRange).length > 0 }
                 .map { NSMaxRange($0.sourceNSRange) }.max() ?? NSMaxRange(sourceRange)

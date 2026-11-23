@@ -77,9 +77,11 @@ public enum TextKey: String, CaseIterable, Sendable {
     case undo, redo, cut, copy, paste, selectAll, find, replace
     case headings, body, heading, inline, bold, italic, strike, inlineCode, lists, unordered, ordered, tasks, paragraph, quote, indent, outdent, clearFormat
     case link, image, table, codeBlock, rule, tableActions, addRow, deleteRow, addColumn, deleteColumn, deleteTable
+    case insertRowAbove, insertRowBelow, insertColumnLeft, insertColumnRight
     case richMode, sourceMode, minimize, zoom, bringAll, appHelp
     case untitled, create, documentName, chooseFolder, authorizeFolder, folderPermission, errorTitle, operationFailed, invalidName, alreadyExists, invalidImage, unsafePath
-    case linkAddress, cancel, confirm, columns, rows, trialStart, trialDisclosure, priceUnavailable, buy, lifetime, checking, notStarted, trialStatus, unlocked, expired, pending, purchaseFailed, restoreSuccess, restoreEmpty
+    case editLink, openLink, copyLinkAddress, removeLink
+    case linkText, linkAddress, cancel, confirm, columns, rows, trialStart, trialDisclosure, priceUnavailable, buy, lifetime, checking, notStarted, trialStatus, unlocked, expired, pending, purchaseFailed, restoreSuccess, restoreEmpty
     case general, appearance, system, light, dark, language, english, chinese, spellcheck, defaultMode, version, copyright, readonly, edited, documentStatus, helpContent, unsupportedEdit
     case saveChanges, discard, unsavedChanges, resourceWarning, missingImage, collectImages, collected
     case imageTooLarge, imageImportCancelled, retry

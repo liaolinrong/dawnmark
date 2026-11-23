@@ -154,6 +154,7 @@ import ImageIO
     }
 
     func retainAccess(to url: URL) {
+        guard !scopes.contains(url) else { return }
         if url.startAccessingSecurityScopedResource() { scopes.append(url) }
     }
 
@@ -179,18 +180,23 @@ import ImageIO
     }
 
     func windowWillClose(_ notification: Notification) {
+        close()
+    }
+
+    override func close() {
+        super.close()
         for url in scopes { url.stopAccessingSecurityScopedResource() }
         scopes.removeAll()
-        close()
     }
 
     func authorizeDirectory() -> Bool {
         let directory = location.directoryURL
         if FileManager.default.isWritableFile(atPath: directory.path),
            (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) != nil { return true }
-        if let url = BookmarkStore.resolve(directory) {
+        if let url = SecurityScopedBookmarks.shared.resolveDirectory(containing: location.markdownURL) {
             retainAccess(to: url)
-            if FileManager.default.isWritableFile(atPath: directory.path) { return true }
+            if FileManager.default.isWritableFile(atPath: directory.path),
+               (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) != nil { return true }
         }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -201,7 +207,9 @@ import ImageIO
         guard panel.runModal() == .OK, let selected = panel.url,
               selected.standardizedFileURL == directory.standardizedFileURL else { return false }
         retainAccess(to: selected)
-        BookmarkStore.remember(selected)
+                do { try SecurityScopedBookmarks.shared.remember(selected) }
+                catch { (NSApp.delegate as? AppDelegate)?.showError(error); return false }
+                unavailableImages.removeAll()
         return true
     }
 
@@ -225,7 +233,7 @@ import ImageIO
                 }.value
                 guard self.commerce.canEdit, self.windowControllers.contains(where: { $0.window?.isVisible == true }) else { return }
                 guard let range = anchor.range else { self.showImportCancelled(); return }
-                _ = self.session.replaceSource(in: range, with: images.map(\.markdown).joined(separator: "\n"))
+                _ = self.editor.insertMarkdown(images.map(\.markdown).joined(separator: "\n"), in: range)
             } catch { (NSApp.delegate as? AppDelegate)?.showError(error) }
         }
     }
@@ -279,22 +287,4 @@ private actor ThumbnailDecoder {
 private nonisolated func onMain<Value: Sendable>(_ action: @MainActor @Sendable () -> Value) -> Value {
     if Thread.isMainThread { return MainActor.assumeIsolated(action) }
     return DispatchQueue.main.sync { MainActor.assumeIsolated(action) }
-}
-
-@MainActor enum BookmarkStore {
-    static func remember(_ url: URL) {
-        guard let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
-        var bookmarks = UserDefaults.standard.dictionary(forKey: "directoryBookmarks") as? [String: Data] ?? [:]
-        bookmarks[url.standardizedFileURL.path] = data
-        UserDefaults.standard.set(bookmarks, forKey: "directoryBookmarks")
-    }
-
-    static func resolve(_ url: URL) -> URL? {
-        guard let bookmarks = UserDefaults.standard.dictionary(forKey: "directoryBookmarks") as? [String: Data],
-              let data = bookmarks[url.standardizedFileURL.path] else { return nil }
-        var stale = false
-        guard let resolved = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
-        if stale { remember(resolved) }
-        return resolved
-    }
 }
