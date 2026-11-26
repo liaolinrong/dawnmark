@@ -13,11 +13,41 @@ import MarkdownEngine
     public var onListNewline: (() -> Bool)?
     public var onListIndent: ((Bool) -> Bool)?
     public var onLinkMenu: ((Int) -> NSMenu?)?
+    public var onCodeBlockMenu: ((Int) -> NSMenu?)?
     public var onTableMenu: ((Int) -> NSMenu?)?
     public private(set) var isComposing = false
     public private(set) var isCancellingComposition = false
     public weak var documentSession: DocumentSession?
     private var checkboxTrackingArea: NSTrackingArea?
+    weak var codeLanguagePicker: CodeLanguagePicker?
+    private var codeLanguagePickerOffset: Int?
+
+    override public func layout() {
+        super.layout()
+        positionCodeLanguagePicker(at: codeLanguagePickerOffset)
+    }
+
+    func positionCodeLanguagePicker(at offset: Int?) {
+        codeLanguagePickerOffset = offset
+        guard let picker = codeLanguagePicker else { return }
+        guard let offset, let storage = textStorage, offset < storage.length,
+              let paragraph = storage.attribute(.paragraphStyle, at: offset, effectiveRange: nil) as? NSParagraphStyle,
+              let block = paragraph.textBlocks.compactMap({ $0 as? CodeBlockTextBlock }).first,
+              let layout = layoutManager else { picker.isHidden = true; return }
+        layout.ensureLayout(forCharacterRange: NSRange(location: offset, length: 1))
+        let glyph = layout.glyphIndexForCharacter(at: offset)
+        let origin = textContainerOrigin
+        let frame = block.backgroundRect(for: layout.boundsRect(for: block, at: glyph, effectiveRange: nil))
+            .offsetBy(dx: origin.x, dy: origin.y)
+        let right = min(frame.maxX, bounds.maxX)
+        let width = min(max(112, picker.intrinsicContentSize.width), 220, right - frame.minX)
+        let bottom = frame.minY - CodeBlockTextBlock.languagePickerGap
+        let height = max(CodeBlockTextBlock.languagePickerHeight, picker.intrinsicContentSize.height)
+        guard width > 0, height > 0 else { picker.isHidden = true; return }
+        picker.frame = NSRect(x: right - width, y: max(bounds.minY, bottom - height),
+                      width: width, height: height)
+        picker.isHidden = false
+    }
 
     public override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
@@ -235,6 +265,19 @@ import MarkdownEngine
         let local = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
         layout.ensureLayout(for: container)
         let glyph = layout.glyphIndex(for: local, in: container)
+        if glyph < layout.numberOfGlyphs,
+           layout.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).insetBy(dx: -6, dy: 0).contains(local),
+           let code = onCodeBlockMenu?(layout.characterIndexForGlyph(at: glyph)) {
+            let selection = selectedRanges
+            let menu = super.menu(for: event) ?? NSMenu()
+            if selectedRanges != selection { selectedRanges = selection }
+            if !menu.items.isEmpty { menu.insertItem(.separator(), at: 0) }
+            while let item = code.items.first {
+                code.removeItem(item)
+                menu.insertItem(item, at: 0)
+            }
+            return menu
+        }
         if glyph < layout.numberOfGlyphs,
            layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).contains(local),
            let menu = onLinkMenu?(layout.characterIndexForGlyph(at: glyph)) {

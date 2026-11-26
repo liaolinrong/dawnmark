@@ -68,7 +68,8 @@ import EditorKit
         format.addItem(.separator()); command(format, .clearFormat, .clearFormatting)
         let insert = menu(L10n.text(.insert))
         add(insert, .link, #selector(insertLink(_:)), "k"); add(insert, .image, #selector(insertImage(_:))); add(insert, .table, #selector(insertTable(_:)))
-        insert.addItem(.separator()); command(insert, .codeBlock, .codeBlock); command(insert, .rule, .horizontalRule)
+        insert.addItem(.separator()); add(insert, .insertCodeBlock, #selector(insertCodeBlock(_:)))
+        add(insert, .codeBlockLanguage, #selector(editCodeBlockLanguage(_:))); command(insert, .rule, .horizontalRule)
         let table = menu(L10n.text(.tableActions))
         for (index, commands) in tableCommandGroups.enumerated() {
             if index > 0 { table.addItem(.separator()) }
@@ -125,6 +126,8 @@ import EditorKit
             }
             return commerce.canEdit
         }
+        if action == #selector(editCodeBlockLanguage(_:)) { return commerce.canEdit && document?.editor.canEdit == true && document?.editor.currentCodeBlock != nil }
+        if action == #selector(insertCodeBlock(_:)) { return commerce.canEdit && document?.editor.formattingState(.codeBlock) != .unavailable && document?.editor.canEdit == true }
         if action == #selector(formatCommand(_:)) || action == #selector(insertLink(_:)) || action == #selector(insertImage(_:)) || action == #selector(insertTable(_:)) || action == #selector(saveAs(_:)) { return document != nil && commerce.canEdit }
         if action == #selector(showInFinder(_:)) || action == #selector(showFind(_:)) { return document != nil }
         return true

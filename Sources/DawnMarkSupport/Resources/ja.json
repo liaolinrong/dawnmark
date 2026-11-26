@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "コードブロック…", "codeBlockLanguage": "コードブロックの言語…", "noCodeBlockLanguage": "言語を指定しない",
   "editLink": "リンクを編集...",
   "openLink": "リンクを開く",
   "copyLinkAddress": "リンク先をコピー",

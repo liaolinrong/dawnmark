@@ -22,6 +22,44 @@ public struct MarkdownLinkContext: Sendable {
 }
 
 extension DocumentSession {
+    public func codeBlock(atDisplayedOffset offset: Int) -> CodeBlockSnapshot? {
+        guard let snapshot = renderSnapshot, snapshot.source == source else { return nil }
+        return snapshot.codeBlocks.first { $0.range.location == offset || NSLocationInRange(offset, $0.range) }
+    }
+
+    @discardableResult public func setCodeBlockLanguage(_ language: String, in block: CodeBlockSnapshot) -> Bool {
+          guard canEdit, Self.validCodeLanguage(language), let snapshot = renderSnapshot, snapshot.source == source,
+              snapshot.codeBlocks.contains(where: { $0.languageSourceRange == block.languageSourceRange && $0.range == block.range }) else { return false }
+          guard !language.isEmpty || !block.hasAdditionalInfo else { return false }
+        let range = block.languageSourceRange
+        let original = source as NSString
+        let replacement = language.hasPrefix("~") && range.location > 0 && original.character(at: range.location - 1) == 126
+            ? " " + language : language
+        let delta = replacement.utf16.count - range.length
+        let selection = selectedSourceRange
+        func shifted(_ offset: Int) -> Int {
+            if offset >= NSMaxRange(range) { return offset + delta }
+            return min(offset, range.location + replacement.utf16.count)
+        }
+        let start = shifted(selection.location)
+        let end = shifted(NSMaxRange(selection))
+        return apply([SourcePatch(range: range, replacement: replacement)], selectionAfter: NSRange(location: start, length: end - start))
+    }
+
+    @discardableResult public func insertCodeBlock(language: String, in selection: NSRange) -> Bool {
+        guard canEdit, Self.validCodeLanguage(language), let range = Range(selection, in: source),
+              formattingState(.codeBlock, in: selection) != .unavailable else { return false }
+        let selected = String(source[range])
+        let fence = String(repeating: "`", count: max(3, longestRun(of: "`", in: selected) + 1))
+        let newline = source.contains("\r\n") ? "\r\n" : source.contains("\r") && !source.contains("\n") ? "\r" : "\n"
+        let closingBreak = selected.last?.isNewline == true ? "" : newline
+        return wrap(selection, prefix: newline + fence + language + newline, suffix: closingBreak + fence + newline)
+    }
+
+    private static func validCodeLanguage(_ language: String) -> Bool {
+        language.utf8.allSatisfy { (33...126).contains($0) && ![38, 92, 96].contains($0) }
+    }
+
     public func link(in selection: NSRange) -> MarkdownLinkContext? {
         guard Range(selection, in: source) != nil else { return nil }
         let coordinates = SourceCoordinates(source: source)
@@ -120,10 +158,7 @@ extension DocumentSession {
             let table = ([row, delimiter] + Array(repeating: row, count: rows - 1)).joined(separator: newline)
             return insertSeparatedBlock(table, in: selection, newline: newline)
         case .codeBlock:
-            let fence = String(repeating: "`", count: max(3, longestRun(of: "`", in: selected) + 1))
-            let newline = selected.contains("\r\n") || source.contains("\r\n") ? "\r\n" : "\n"
-            let closingBreak = !selected.isEmpty && ((selected as NSString).hasSuffix("\n") || (selected as NSString).hasSuffix("\r")) ? "" : newline
-            return wrap(selection, prefix: newline + fence + newline, suffix: closingBreak + fence + newline)
+            return insertCodeBlock(language: "", in: selection)
         case .clearFormatting: return clearFormatting(selection)
         default: return formatLines(command, selection: selection)
         }

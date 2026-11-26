@@ -120,7 +120,13 @@ Xcode 的 Debug 和 Release 均启用 App Sandbox、用户选择文件读写以�
 ## 当前边界
 
 - GFM 常见语法、任务复选框、原生图片、表格单元格编辑和增删行列已实现。表格使用 AppKit 原生文本表格，每列按整列最宽内容测量；空间不足时保留短列所需宽度，压缩长列并在各单元格内自动换行，行高随内容增长。窗口缩放和编辑会重新分配列宽，不修改 Markdown 原文；复杂单元格内容与 GitHub 的排版仍可能有差异。
-- 代码块等宽展示，尚无语言语法着色、语言编辑面板；任意 HTML、数学公式、Mermaid 不执行，不支持的语法保留并通过源码模式编辑。
+- 所见即所得模式使用 Tree-sitter 为显式标注的代码块着色，覆盖 36 种语言和格式：
+  - 应用和 Web：Swift、Objective-C、C、C++、C#、Rust、Go、Java、Kotlin、Scala、Dart、Python、Ruby、PHP、JavaScript（含 JSX）、TypeScript、TSX、HTML、CSS。
+  - 数据、脚本和硬件：SQL、R、Julia、MATLAB、Bash、PowerShell、Lua、Fish、Verilog、SystemVerilog、VHDL、Assembly (GNU)。
+  - 配置和构建：JSON、YAML、TOML、Dockerfile、Makefile。
+- 未标注、未知语言或超过 64 Ki 个 UTF-16 代码单元的代码块仍等宽显示。源码模式仍显示 Markdown 原文；不执行 HTML、数学公式或 Mermaid。
+- 高亮在后台运行，复用未变代码块的结果和修改前的语法树。高亮查询与第三方许可证随 EditorKit 打包。更新 SwiftPM 语法后，运行 `sh Scripts/update-highlight-resources.sh` 同步资源（可传入自定义的 `checkouts` 路径）；更新本地语法的锁定提交后，运行 `sh Scripts/update-highlight-resources.sh --refresh-vendored` 同步生成的 C 源码、查询和许可证。最后运行 `swift test --filter CodeHighlightTests`。
+- 通过「插入 → 代码块…」指定新代码块的语言。在所见即所得模式，也可以使用当前代码块上方靠右的输入框，或右键使用「代码块语言…」。输入前缀会显示匹配建议，例如输入 `g` 后点击 `go` 即确认；直接键入自定义标签时按回车确认。未支持的标签会原样保留，仅不在 DawnMark 中高亮。标签修改可撤销，不改代码正文。
 - 某些不能安全映射的富文本编辑会被拒绝；源码模式始终保留原始内容供精确编辑。
 - 后台 AST 解析会合并连续输入并丢弃过期结果，但源码变化后仍可能全量更新文本布局；没有声称已实现增量解析或完成 Instruments 性能验收。
 - 目录外图片需要显式导入；尚无孤立图片清理、外部编辑冲突合并或远程图片下载管理界面。

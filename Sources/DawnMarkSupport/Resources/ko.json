@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "코드 블록…", "codeBlockLanguage": "코드 블록 언어…", "noCodeBlockLanguage": "언어 지정 안 함",
   "editLink": "링크 편집...",
   "openLink": "링크 열기",
   "copyLinkAddress": "링크 주소 복사",

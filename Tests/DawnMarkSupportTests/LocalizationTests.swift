@@ -108,6 +108,30 @@ import Testing
     }
 }
 
+@Test func codeBlockLanguageMenusAreLocalizedInEveryLanguage() {
+    let expected: [AppLanguage: [String]] = [
+        .english: ["Code Block…", "Code Block Language…", "No Language"],
+        .simplifiedChinese: ["代码块…", "代码块语言…", "不指定语言"],
+        .traditionalChinese: ["程式碼區塊…", "程式碼區塊語言…", "不指定語言"],
+        .japanese: ["コードブロック…", "コードブロックの言語…", "言語を指定しない"],
+        .korean: ["코드 블록…", "코드 블록 언어…", "언어 지정 안 함"],
+        .french: ["Bloc de code…", "Langage du bloc de code…", "Aucun langage"],
+        .german: ["Codeblock…", "Sprache des Codeblocks…", "Keine Sprache"],
+        .spanish: ["Bloque de código…", "Lenguaje del bloque de código…", "Sin lenguaje"],
+        .brazilianPortuguese: ["Bloco de código…", "Linguagem do bloco de código…", "Sem linguagem"],
+        .portuguese: ["Bloco de código…", "Linguagem do bloco de código…", "Sem linguagem"],
+        .italian: ["Blocco di codice…", "Linguaggio del blocco di codice…", "Nessun linguaggio"],
+        .dutch: ["Codeblok…", "Taal van het codeblok…", "Geen taal"],
+        .polish: ["Blok kodu…", "Język bloku kodu…", "Bez języka"],
+        .turkish: ["Kod bloğu…", "Kod bloğunun dili…", "Dil belirtilmemiş"],
+        .indonesian: ["Blok Kode…", "Bahasa Blok Kode…", "Tanpa Bahasa"]
+    ]
+    #expect(Set(expected.keys) == Set(AppLanguage.allCases))
+    for language in AppLanguage.allCases {
+        #expect([TextKey.insertCodeBlock, .codeBlockLanguage, .noCodeBlockLanguage].map { L10n.text($0, language: language) } == expected[language])
+    }
+}
+
 @Test func deleteTableMenuIsLocalizedInEveryLanguage() throws {
     let expected: [AppLanguage: String] = [
         .english: "Delete Table", .simplifiedChinese: "删除表格", .traditionalChinese: "刪除表格",

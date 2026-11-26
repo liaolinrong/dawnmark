@@ -62,6 +62,11 @@ import UniformTypeIdentifiers
             guard let self, let document else { return nil }
             return self.makeTableMenu(document: document, sourceRange: range)
         }
+        document.editor.codeBlockMenu = { [weak self, weak document] block in
+            guard let self, let document else { return nil }
+            return self.makeCodeBlockMenu(document: document, block: block)
+        }
+        document.editor.codeLanguagePickerLabels = { (L10n.text(.codeBlockLanguage), L10n.text(.noCodeBlockLanguage)) }
         NSDocumentController.shared.addDocument(document)
         NSDocumentController.shared.noteNewRecentDocumentURL(location.markdownURL)
         let snapshot = MarkdownRenderer.snapshot(source: source)
@@ -223,6 +228,68 @@ import UniformTypeIdentifiers
         guard commerce.canEdit, let context = sender.representedObject as? TableMenuContext,
               let document = context.document, document.session.source == context.source else { return }
         _ = document.editor.perform(context.command, inSourceRange: context.sourceRange)
+    }
+
+    @MainActor private final class CodeBlockMenuContext {
+        weak var document: MarkdownDocument?
+        let source: String
+        let block: CodeBlockSnapshot
+
+        init(document: MarkdownDocument, block: CodeBlockSnapshot) {
+            self.document = document
+            source = document.session.source
+            self.block = block
+        }
+    }
+
+    func makeCodeBlockMenu(document: MarkdownDocument, block: CodeBlockSnapshot) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let item = NSMenuItem(title: L10n.text(.codeBlockLanguage), action: #selector(editCodeBlockLanguage(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = CodeBlockMenuContext(document: document, block: block)
+        item.isEnabled = commerce.canEdit && document.editor.canEdit
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc func insertCodeBlock(_ sender: Any?) {
+        guard let document = activeDocument else { return }
+        showCodeBlockLanguagePicker(document: document, block: nil)
+    }
+
+    @objc func editCodeBlockLanguage(_ sender: NSMenuItem) {
+        if let context = sender.representedObject as? CodeBlockMenuContext {
+            guard let document = context.document, document.session.source == context.source else { return }
+            showCodeBlockLanguagePicker(document: document, block: context.block)
+        } else if let document = activeDocument, let block = document.editor.currentCodeBlock {
+            showCodeBlockLanguagePicker(document: document, block: block)
+        }
+    }
+
+    private func showCodeBlockLanguagePicker(document: MarkdownDocument, block: CodeBlockSnapshot?) {
+        guard commerce.canEdit, document.editor.canEdit else { return }
+        let source = document.session.source
+        let original = block.map { (source as NSString).substring(with: $0.languageSourceRange) } ?? ""
+        let picker = CodeLanguagePicker(frame: .zero, inline: true)
+        picker.setFrameSize(picker.intrinsicContentSize)
+        picker.configure(original: original, hasAdditionalInfo: block?.hasAdditionalInfo == true,
+                         title: L10n.text(.codeBlockLanguage), noLanguage: L10n.text(.noCodeBlockLanguage))
+        let alert = NSAlert()
+        alert.messageText = L10n.text(.codeBlockLanguage)
+        alert.accessoryView = picker
+        let confirm = alert.addButton(withTitle: L10n.text(.confirm))
+        alert.addButton(withTitle: L10n.text(.cancel))
+        alert.window.initialFirstResponder = picker.input
+        picker.onCommit = { [weak confirm] _ in confirm?.performClick(nil) }
+        while alert.runModal() == .alertFirstButtonReturn, document.session.source == source,
+              commerce.canEdit, document.editor.canEdit {
+            let language = picker.language
+            if let block {
+                if language == original || document.editor.setCodeBlockLanguage(language, in: block) { return }
+            } else if document.editor.insertCodeBlock(language: language) { return }
+            NSSound.beep()
+        }
     }
 
     @objc func insertImage(_ sender: Any?) {

@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "代码块…", "codeBlockLanguage": "代码块语言…", "noCodeBlockLanguage": "不指定语言",
   "editLink": "编辑链接...",
   "openLink": "打开链接",
   "copyLinkAddress": "复制链接地址",

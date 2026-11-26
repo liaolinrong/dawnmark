@@ -67,6 +67,8 @@ import EditorKit
             precondition(tableMenu.items.filter { !$0.isSeparatorItem }.map(\.title) == tableCommandGroups.flatMap { $0.map { L10n.text($0.0) } })
             precondition(tableMenu.items.contains { $0.title == L10n.text(.deleteTable) })
             precondition(NSApp.mainMenu!.items[4].submenu!.items.contains { $0.action == #selector(insertTable(_:)) })
+            precondition(NSApp.mainMenu!.items[4].submenu!.items.contains { $0.action == #selector(insertCodeBlock(_:)) && $0.title == L10n.text(.insertCodeBlock) })
+            precondition(NSApp.mainMenu!.items[4].submenu!.items.contains { $0.action == #selector(editCodeBlockLanguage(_:)) && $0.title == L10n.text(.codeBlockLanguage) })
             for level in 1...6 {
                 precondition(formatItems[level].keyEquivalent == "\(level)")
                 precondition(formatItems[level].keyEquivalentModifierMask == [.command, .option])

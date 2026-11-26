@@ -10,6 +10,22 @@ import AppKit
     public var sourceUpdated: ((String) -> Void)?
     public var linkMenu: ((MarkdownLinkContext) -> NSMenu?)?
     public var tableMenu: ((NSRange) -> NSMenu?)?
+    public var codeBlockMenu: ((CodeBlockSnapshot) -> NSMenu?)?
+    public var codeLanguagePickerLabels: (() -> (title: String, noLanguage: String))? {
+        didSet { updateCodeLanguagePicker() }
+    }
+    let codeLanguagePicker = CodeLanguagePicker(frame: .zero)
+    public static var codeBlockLanguages: [(label: String, title: String)] {
+        CodeLanguage.allCases.map { ($0.rawValue, $0.displayName) }.sorted { $0.title < $1.title }
+    }
+
+    public var currentCodeBlock: CodeBlockSnapshot? {
+        guard isViewLoaded, mode == .richText, !textView.isComposing, !textView.hasMarkedText() else { return nil }
+        let selection = textView.selectedRange()
+        guard let block = session.codeBlock(atDisplayedOffset: selection.location),
+              NSMaxRange(selection) <= NSMaxRange(block.range) else { return nil }
+        return block
+    }
     public var onImportImages: (([URL], Data?) -> Void)? { didSet { textView?.onImportImages = onImportImages } }
     public var imageProvider: ((String) -> NSImage?)? {
         didSet {
@@ -53,6 +69,11 @@ import AppKit
     private var displayedSource = ""
     private var displayedMode: EditorMode?
     private var renderedSnapshotSource: String?
+    private let codeHighlighter = CodeHighlighter()
+    private var codeHighlightTask: Task<Void, Never>?
+    private var codeHighlightRevision: UInt64 = 0
+    private var scheduledHighlightSource: String?
+    private var hasCodeColors = false
     private var imagesChanged = true
     private var applyingNativeEdit = false
     private var refreshing = false
@@ -69,6 +90,7 @@ import AppKit
         super.init(nibName: nil, bundle: nil)
         changeToken = session.observeChanges { [weak self] value in
             guard let self else { return }
+            self.invalidateCodeHighlightTask()
             if !self.applyingNativeEdit { self.clearPendingStyles() }
             self.sourceUpdated?(value.source)
             self.textView?.isEditable = value.canEdit
@@ -92,6 +114,7 @@ import AppKit
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     deinit {
+        codeHighlightTask?.cancel()
         let session = session
         let tokens = [changeToken, renderToken, editabilityToken].compactMap { $0 }
         Task { @MainActor in for token in tokens { session.removeObserver(token) } }
@@ -149,7 +172,7 @@ import AppKit
         editor.onListNewline = { [weak self] in
             guard let self, self.mode == .richText else { return false }
             return self.structuralEdit {
-                self.insertNewlineBeforeBlock() || self.session.continueList(in: self.selectedSourceRange())
+                self.insertNewlineAfterCodeBlock() || self.insertNewlineBeforeBlock() || self.session.continueList(in: self.selectedSourceRange())
             }
         }
         editor.onListIndent = { [weak self] outdent in
@@ -162,6 +185,10 @@ import AppKit
             guard let self, let link = self.link(atDisplayedOffset: offset) else { return nil }
             return self.linkMenu?(link)
         }
+        editor.onCodeBlockMenu = { [weak self] offset in
+            guard let self, self.mode == .richText, let block = self.session.codeBlock(atDisplayedOffset: offset) else { return nil }
+            return self.codeBlockMenu?(block)
+        }
         editor.onTableMenu = { [weak self] offset in
             guard let self, self.displayedSource == self.session.source,
                   offset >= 0, offset < self.textView.string.utf16.count else { return nil }
@@ -172,6 +199,10 @@ import AppKit
         }
         scroll.documentView = editor
         textView = editor
+        codeLanguagePicker.isHidden = true
+        codeLanguagePicker.onCommit = { [weak self] picker in self?.changeCodeLanguage(picker) }
+        editor.codeLanguagePicker = codeLanguagePicker
+        editor.addSubview(codeLanguagePicker)
         let root = EditorSplitView(sidebar: outlineSidebar, editor: scroll)
         outlineSidebar.onNavigate = { [weak self] heading in self?.navigate(to: heading) }
         view = root
@@ -198,6 +229,40 @@ import AppKit
 
     @discardableResult public func removeLink(in range: NSRange) -> Bool {
         structuralEdit { session.removeLink(in: range) }
+    }
+
+    @discardableResult public func insertCodeBlock(language: String) -> Bool {
+        session.selectedSourceRange = selectedSourceRange()
+        return structuralEdit { session.insertCodeBlock(language: language, in: session.selectedSourceRange) }
+    }
+
+    @discardableResult public func setCodeBlockLanguage(_ language: String, in block: CodeBlockSnapshot) -> Bool {
+        session.selectedSourceRange = selectedSourceRange()
+        return structuralEdit { session.setCodeBlockLanguage(language, in: block) }
+    }
+
+    private func updateCodeLanguagePicker() {
+        guard isViewLoaded else { return }
+        guard canEdit, let block = currentCodeBlock, let labels = codeLanguagePickerLabels?() else {
+            textView.positionCodeLanguagePicker(at: nil)
+            return
+        }
+        let original = (session.source as NSString).substring(with: block.languageSourceRange)
+        if codeLanguagePicker.input.currentEditor() == nil {
+            codeLanguagePicker.configure(original: original, hasAdditionalInfo: block.hasAdditionalInfo,
+                                         title: labels.title, noLanguage: labels.noLanguage)
+        }
+        textView.positionCodeLanguagePicker(at: block.range.length > 0 ? block.range.location : nil)
+    }
+
+    private func changeCodeLanguage(_ sender: CodeLanguagePicker) {
+        if canEdit, let block = currentCodeBlock {
+            let original = (session.source as NSString).substring(with: block.languageSourceRange)
+            let language = sender.language
+            if language != original, !setCodeBlockLanguage(language, in: block) { NSSound.beep() }
+        }
+        textView.window?.makeFirstResponder(textView)
+        updateCodeLanguagePicker()
     }
 
     public func selectedSourceRange() -> NSRange {
@@ -318,6 +383,19 @@ import AppKit
         return structuralEdit { session.toggleTaskCheckbox(atSourceOffset: segment.sourceNSRange.location + marker.location) }
     }
 
+    private func insertNewlineAfterCodeBlock() -> Bool {
+        let selection = textView.selectedRange()
+        guard selection.length == 0 else { return false }
+        guard let snapshot = session.renderSnapshot, snapshot.source == session.source,
+              let block = snapshot.codeBlocks.first(where: { $0.range.length > 0 && NSMaxRange($0.range) == selection.location }),
+              let end = block.closingFenceEnd else { return false }
+        let source = session.source
+        let newline = source.contains("\r\n") ? "\r\n" : source.contains("\r") && !source.contains("\n") ? "\r" : "\n"
+        session.selectedSourceRange = NSRange(location: end, length: 0)
+        return session.apply([SourcePatch(range: session.selectedSourceRange, replacement: newline)],
+                     selectionAfter: NSRange(location: end + newline.utf16.count, length: 0))
+    }
+
     private func insertNewlineBeforeBlock() -> Bool {
         let selection = textView.selectedRange()
         guard selection.length == 0 else { return false }
@@ -390,6 +468,16 @@ import AppKit
         if self.textView.isComposing || textView.hasMarkedText() { return true }
         guard let replacementString else { return false }
         let editingRange = affectedCharRange
+        if mode == .richText, replacementString.isEmpty, editingRange.length == 1,
+           textView.selectedRange() == NSRange(location: NSMaxRange(editingRange), length: 0),
+           let snapshot = session.renderSnapshot, snapshot.source == session.source,
+           snapshot.codeBlocks.contains(where: {
+               $0.closingFenceEnd != nil && $0.range.length > 0 && NSMaxRange($0.range) == NSMaxRange(editingRange)
+           }) {
+            textView.setSelectedRange(NSRange(location: editingRange.location, length: 0))
+            session.selectedSourceRange = selectedSourceRange()
+            return false
+        }
         if mode == .richText, replacementString.isEmpty, affectedCharRange.length == 1,
            textView.selectedRange() == NSRange(location: NSMaxRange(affectedCharRange), length: 0),
            affectedCharRange.location > 0, let storage = textView.textStorage,
@@ -480,6 +568,7 @@ import AppKit
         session.selectedSourceRange = selectedSourceRange()
         if pendingStyleSelection != session.selectedSourceRange { clearPendingStyles() }
         outlineSidebar.selectHeading(atSourceOffset: session.selectedSourceRange.location)
+        updateCodeLanguagePicker()
     }
     public func textView(_ textView: NSTextView, shouldChangeTextInRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
         guard affectedRanges.count == 1, let replacement = replacementStrings?.first else { return false }
@@ -587,6 +676,7 @@ import AppKit
             outlineSidebar.selectHeading(atSourceOffset: selection.location)
         }
         if mode == .source {
+            clearCodeHighlights()
             if displayedSource != session.source || displayedMode != .source {
                 textView.textStorage?.setAttributedString(NSAttributedString(string: session.source, attributes: [.font: NSFont.monospacedSystemFont(ofSize: Typography.source, weight: .regular), .foregroundColor: NSColor.textColor]))
             }
@@ -600,6 +690,7 @@ import AppKit
                 let result = MarkdownRenderer.render(snapshot: snapshot, imageProvider: imageProvider)
                 if displayedMode != .richText || imagesChanged
                     || (!applyRenderedAttributes(result.attributedString) && !applyCheckboxUpdate(result.attributedString)) {
+                    clearCodeHighlights()
                     textView.textStorage?.setAttributedString(result.attributedString)
                 }
                 map = result.sourceMap
@@ -608,12 +699,15 @@ import AppKit
             }
             displayedSource = snapshot.source
             displayedMode = .richText
+            scheduleCodeHighlights(snapshot)
             let displayedSelection = snapshot.sourceMap.displayedRange(forSourceRange: selection)
             if textView.selectedRange() != displayedSelection { textView.setSelectedRange(displayedSelection) }
             pendingRender = false
         } else {
+            invalidateCodeHighlightTask()
             pendingRender = true
             if displayedSource != session.source || displayedMode != .richText {
+                clearCodeHighlights()
                 textView.textStorage?.setAttributedString(NSAttributedString(string: session.source, attributes: [.font: NSFont.systemFont(ofSize: Typography.body)]))
                 let length = session.source.utf16.count
                 map = SourceMap(segments: [MappingSegment(displayedNSRange: NSRange(location: 0, length: length), sourceNSRange: NSRange(location: 0, length: length), kind: .text, isIdentity: true)], sourceLength: length, displayedLength: length)
@@ -631,9 +725,77 @@ import AppKit
         }
         textView.window?.invalidateCursorRects(for: textView)
         textView.typingAttributes = [.font: mode == .source ? NSFont.monospacedSystemFont(ofSize: Typography.source, weight: .regular) : NSFont.systemFont(ofSize: Typography.body), .foregroundColor: NSColor.textColor]
+        updateCodeLanguagePicker()
+    }
+
+    func waitForCodeHighlights() async { await codeHighlightTask?.value }
+
+    private func invalidateCodeHighlightTask() {
+        if scheduledHighlightSource != nil {
+            codeHighlightRevision &+= 1
+            codeHighlightTask?.cancel()
+            codeHighlightTask = nil
+            scheduledHighlightSource = nil
+        }
+    }
+
+    private func clearCodeHighlights() {
+        invalidateCodeHighlightTask()
+        guard hasCodeColors else { return }
+        if let storage = textView.textStorage {
+            textView.layoutManager?.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: 0, length: storage.length))
+        }
+        hasCodeColors = false
+    }
+
+    private func scheduleCodeHighlights(_ snapshot: RenderSnapshot) {
+        guard !snapshot.codeBlocks.isEmpty else { clearCodeHighlights(); return }
+        guard scheduledHighlightSource != snapshot.source else { return }
+        invalidateCodeHighlightTask()
+        scheduledHighlightSource = snapshot.source
+        let revision = codeHighlightRevision
+        let highlighter = codeHighlighter
+        codeHighlightTask = Task(priority: .utility) { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(25)) } catch { return }
+            let highlights = await highlighter.highlights(in: snapshot)
+            guard !Task.isCancelled, let self, self.codeHighlightRevision == revision else { return }
+            if self.textView.isComposing || self.textView.hasMarkedText() {
+                self.scheduledHighlightSource = nil
+                return
+            }
+            guard self.mode == .richText, self.session.source == snapshot.source,
+                  self.renderedSnapshotSource == snapshot.source else { return }
+            self.applyCodeHighlights(highlights)
+        }
+    }
+
+    private func applyCodeHighlights(_ highlights: [CodeHighlight]) {
+        guard hasCodeColors || !highlights.isEmpty, let storage = textView.textStorage,
+              let layout = textView.layoutManager, storage.length > 0 else { return }
+        let whole = NSRange(location: 0, length: storage.length)
+        var index = 0
+        var tokenIndex = 0
+        while index < whole.length {
+            var actual = NSRange()
+            let current = layout.temporaryAttribute(.foregroundColor, atCharacterIndex: index,
+                                                    longestEffectiveRange: &actual, in: whole) as? NSColor
+            let token = tokenIndex < highlights.count ? highlights[tokenIndex] : nil
+            let desired = token.flatMap { $0.range.location <= index ? $0.kind.color : nil }
+            let limit = token.map { $0.range.location <= index ? NSMaxRange($0.range) : $0.range.location } ?? whole.length
+            let end = min(NSMaxRange(actual), limit)
+            let changed = NSRange(location: index, length: end - index)
+            if current != desired {
+                if let desired { layout.addTemporaryAttribute(.foregroundColor, value: desired, forCharacterRange: changed) }
+                else { layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: changed) }
+            }
+            index = end
+            if let token, end == NSMaxRange(token.range) { tokenIndex += 1 }
+        }
+        hasCodeColors = !highlights.isEmpty
     }
 
     private func beginComposition() {
+        updateCodeLanguagePicker()
         compositionText = textView.string
         compositionSource = session.source
         compositionMap = map
@@ -681,5 +843,20 @@ import AppKit
         var result = super.constrainBoundsRect(proposedBounds)
         if preservesScrollOrigin { result.origin = bounds.origin }
         return result
+    }
+}
+
+private extension CodeHighlight.Kind {
+    var color: NSColor {
+        switch self {
+        case .keyword: .systemPurple
+        case .string: .systemRed
+        case .comment: .secondaryLabelColor
+        case .number, .constant: .systemOrange
+        case .type, .tag: .systemTeal
+        case .function: .systemBlue
+        case .property: .systemIndigo
+        case .operatorSymbol: .systemPink
+        }
     }
 }

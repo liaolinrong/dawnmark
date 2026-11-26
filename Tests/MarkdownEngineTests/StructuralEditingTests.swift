@@ -2,6 +2,71 @@ import AppKit
 import Testing
 import MarkdownEngine
 import EditorKit
+
+@MainActor @Test(arguments: ["", "\n\nAfter", "\r\n\r\nAfter"])
+func backspaceAtCodeBlockBoundaryKeepsTrailingBlankLine(suffix: String) throws {
+    let newline = suffix.hasPrefix("\r\n") ? "\r\n" : "\n"
+    let source = ["```swift", "let value = 42", "", "```"].joined(separator: newline) + suffix
+    let session = DocumentSession(source: source)
+    let controller = MarkdownEditorController(session: session)
+    _ = controller.view
+    session.renderNow()
+    let editor = controller.textView!
+    let block = try #require(session.renderSnapshot?.codeBlocks.first)
+    let offset = NSMaxRange(block.range)
+    editor.setSelectedRange(NSRange(location: offset, length: 0))
+    editor.deleteBackward(nil)
+    session.renderNow()
+    #expect(session.source == source)
+    #expect(editor.selectedRange() == NSRange(location: offset - 1, length: 0))
+    if !suffix.isEmpty {
+        let paragraph = (editor.string as NSString).range(of: "After")
+        try #require(paragraph.location != NSNotFound)
+        editor.setSelectedRange(NSRange(location: paragraph.location, length: 0))
+        editor.deleteBackward(nil)
+        session.renderNow()
+        #expect(session.source == String(source.dropLast(suffix.count)) + newline + "After")
+    }
+}
+
+@MainActor @Test(arguments: ["\n", "\n\nAfter", "\nAfter"])
+func returnImmediatelyBelowFencedCodeBlock(suffix: String) throws {
+    let fence = "```swift\nlet value = 42\n```"
+    let session = DocumentSession(source: fence + suffix)
+    let controller = MarkdownEditorController(session: session)
+    _ = controller.view
+    session.renderNow()
+    let editor = controller.textView!
+    let snapshot = try #require(session.renderSnapshot)
+    let offset = NSMaxRange(try #require(snapshot.codeBlocks.first).range)
+    editor.setSelectedRange(NSRange(location: offset, length: 0))
+    editor.insertNewline(nil)
+    session.renderNow()
+    #expect(session.source == fence + "\n" + suffix)
+    #expect(editor.selectedRange() == NSRange(location: offset + 1, length: 0))
+}
+
+@MainActor @Test(arguments: [("`", "\n", 0), ("`", "\n", 1), ("`", "\n", 2), ("~", "\r\n", 0)])
+func returnOnEmptyLineAfterFencedCodeBlock(marker: String, newline: String, trailingCount: Int) {
+    let fence = String(repeating: marker, count: 3)
+    let source = [fence + "swift", "let value = 42", fence].joined(separator: newline)
+        + String(repeating: newline, count: trailingCount)
+    let session = DocumentSession(source: source)
+    let controller = MarkdownEditorController(session: session)
+    _ = controller.view
+    session.renderNow()
+    let editor = controller.textView!
+    let before = editor.string
+    editor.setSelectedRange(NSRange(location: before.utf16.count, length: 0))
+    editor.insertNewline(nil)
+    session.renderNow()
+    #expect(session.source == source + newline)
+    #expect(editor.string == before + newline)
+    #expect(editor.selectedRange() == NSRange(location: before.utf16.count + newline.utf16.count, length: 0))
+    session.undoManager.undo()
+    #expect(session.source == source)
+    #expect(editor.selectedRange() == NSRange(location: before.utf16.count, length: 0))
+}
 import CoreText
 
 @Suite(.serialized) @MainActor struct StructuralEditingTests {

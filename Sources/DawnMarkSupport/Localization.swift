@@ -82,6 +82,7 @@ public enum TextKey: String, CaseIterable, Sendable {
     case untitled, create, documentName, chooseFolder, authorizeFolder, folderPermission, errorTitle, operationFailed, invalidName, alreadyExists, invalidImage, unsafePath
     case editLink, openLink, copyLinkAddress, removeLink
     case linkText, linkAddress, cancel, confirm, columns, rows, trialStart, trialDisclosure, priceUnavailable, buy, lifetime, checking, notStarted, trialStatus, unlocked, expired, pending, purchaseFailed, restoreSuccess, restoreEmpty
+    case insertCodeBlock, codeBlockLanguage, noCodeBlockLanguage
     case general, appearance, system, light, dark, language, english, chinese, spellcheck, defaultMode, version, copyright, readonly, edited, documentStatus, helpContent, unsupportedEdit
     case saveChanges, discard, unsavedChanges, resourceWarning, missingImage, collectImages, collected
     case imageTooLarge, imageImportCancelled, retry

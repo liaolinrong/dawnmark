@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "Kod bloğu…", "codeBlockLanguage": "Kod bloğunun dili…", "noCodeBlockLanguage": "Dil belirtilmemiş",
   "editLink": "Bağlantıyı düzenle...",
   "openLink": "Bağlantıyı aç",
   "copyLinkAddress": "Bağlantı adresini kopyala",

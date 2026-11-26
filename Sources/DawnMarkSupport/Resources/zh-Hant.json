@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "程式碼區塊…", "codeBlockLanguage": "程式碼區塊語言…", "noCodeBlockLanguage": "不指定語言",
   "editLink": "編輯連結...",
   "openLink": "開啟連結",
   "copyLinkAddress": "複製連結位址",

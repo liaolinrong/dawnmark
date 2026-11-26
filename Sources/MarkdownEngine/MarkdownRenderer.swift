@@ -59,6 +59,8 @@ public final class CodeBlockTextBlock: NSTextBlock {
     public static let inlineCornerRadius: CGFloat = 4
     /// Horizontal room around inline code, reserved with kerning so the frame never touches neighbours.
     public static let inlinePadding: CGFloat = 3
+    public static let languagePickerHeight: CGFloat = 22
+    public static let languagePickerGap: CGFloat = 2
     @MainActor public static var fillColor: NSColor { NSColor.textBackgroundColor.blended(withFraction: 0.04, of: .labelColor) ?? .textBackgroundColor }
 
     @MainActor public static func drawFrame(_ rect: NSRect, radius: CGFloat) {
@@ -131,6 +133,15 @@ public struct RenderSnapshot: Sendable {
     public let headings: [OutlineHeading]
     public let tableCells: [TableCellSnapshot]
     public let quoteRanges: [NSRange]
+    public let codeBlocks: [CodeBlockSnapshot]
+}
+
+public struct CodeBlockSnapshot: Sendable {
+    public let language: String
+    public let range: NSRange
+    public let languageSourceRange: NSRange
+    public let hasAdditionalInfo: Bool
+    public let closingFenceEnd: Int?
 }
 
 public struct TableCellSnapshot: Sendable {
@@ -250,7 +261,7 @@ public enum MarkdownRenderer {
                 if start != NSNotFound { result.addAttribute(.obliqueness, value: 0.2, range: NSRange(location: start, length: NSMaxRange(run.range) - start)) }
             }
         }
-        applyCodeBlockFrames(to: result, runs: snapshot.runs)
+        applyCodeBlockFrames(to: result, runs: snapshot.runs, fencedStarts: Set(snapshot.codeBlocks.map { $0.range.location }))
         applyInlineCodeSpacing(to: result)
         for heading in snapshot.headings where heading.level <= 2 && heading.displayedRange.length > 0 {
             result.addAttribute(.markdownHeadingSeparator, value: true, range: heading.displayedRange)
@@ -320,10 +331,10 @@ public enum MarkdownRenderer {
         }
     }
 
-    @MainActor private static func applyCodeBlockFrames(to result: NSMutableAttributedString, runs: [RenderRun]) {
+    @MainActor private static func applyCodeBlockFrames(to result: NSMutableAttributedString, runs: [RenderRun], fencedStarts: Set<Int>) {
         var groups: [NSRange] = []
         for run in runs where run.style.contains(.codeBlock) && run.range.length > 0 {
-            if let last = groups.last, NSMaxRange(last) == run.range.location { groups[groups.count - 1] = NSUnionRange(last, run.range) }
+            if let last = groups.last, NSMaxRange(last) == run.range.location, !fencedStarts.contains(run.range.location) { groups[groups.count - 1] = NSUnionRange(last, run.range) }
             else { groups.append(run.range) }
         }
         let text = result.string as NSString
@@ -359,6 +370,7 @@ private struct RenderVisitor: MarkupVisitor {
     var headings: [OutlineHeading] = []
     var tableCells: [TableCellSnapshot] = []
     var quoteRanges: [NSRange] = []
+    var codeBlocks: [CodeBlockSnapshot] = []
     var tableIndex = -1
     var tableRow = 0
     var style: RenderStyle = []
@@ -380,7 +392,7 @@ private struct RenderVisitor: MarkupVisitor {
     var snapshot: RenderSnapshot {
         var displayed = text as String
         displayed.makeContiguousUTF8()
-        return RenderSnapshot(source: source, text: displayed, runs: runs, sourceMap: SourceMap(segments: segments, sourceLength: sourceLength, displayedLength: text.length, containers: containers), headings: headings, tableCells: tableCells, quoteRanges: quoteRanges)
+        return RenderSnapshot(source: source, text: displayed, runs: runs, sourceMap: SourceMap(segments: segments, sourceLength: sourceLength, displayedLength: text.length, containers: containers), headings: headings, tableCells: tableCells, quoteRanges: quoteRanges, codeBlocks: codeBlocks)
     }
     func range(_ markup: Markup) -> NSRange {
         let mapped = coordinates.nsRange(markup.range)
@@ -723,6 +735,7 @@ private struct RenderVisitor: MarkupVisitor {
     }
     mutating func visitCodeBlock(_ node: CodeBlock) {
         let saved = style; style.formUnion([.code, .codeBlock])
+        let start = text.length
         let outer = range(node)
         let original = raw(outer) as NSString
         let firstLine = original.lineRange(for: NSRange(location: 0, length: 0))
@@ -765,6 +778,22 @@ private struct RenderVisitor: MarkupVisitor {
             }
         }
         style = saved
+        if fenced {
+            let line = original.substring(with: firstLine)
+            let indent = line.prefix { $0 == " " || $0 == "\t" }
+            let fence = line.dropFirst(indent.count).prefix { $0 == opening.first }
+            let after = line.dropFirst(indent.count + fence.count)
+            let spacing = after.prefix { $0 == " " || $0 == "\t" }
+            let label = after.dropFirst(spacing.count).prefix { !$0.isWhitespace }
+            let location = outer.location + indent.utf16.count + fence.utf16.count + spacing.utf16.count
+            let closing = original.substring(from: cursor).trimmingCharacters(in: .whitespaces)
+            codeBlocks.append(CodeBlockSnapshot(language: node.language?.split(whereSeparator: \.isWhitespace).first?.lowercased() ?? "",
+                                                range: NSRange(location: start, length: text.length - start),
+                                                languageSourceRange: NSRange(location: location, length: label.utf16.count),
+                                                hasAdditionalInfo: after.dropFirst(spacing.count + label.count).contains { !$0.isWhitespace },
+                                                closingFenceEnd: closing.count >= fence.count && closing.allSatisfy { $0 == fence.first }
+                                                    ? NSMaxRange(outer) : nil))
+        }
     }
     // Indented-code indentation is syntax, but showing it keeps the text where the source places it.
     mutating func appendCodeIndentation(to end: Int) {

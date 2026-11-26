@@ -1,4 +1,5 @@
 {
+  "insertCodeBlock": "Bloc de code…", "codeBlockLanguage": "Langage du bloc de code…", "noCodeBlockLanguage": "Aucun langage",
   "editLink": "Modifier le lien...",
   "openLink": "Ouvrir le lien",
   "copyLinkAddress": "Copier l'adresse du lien",
