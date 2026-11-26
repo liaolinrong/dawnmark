@@ -22,6 +22,19 @@ import MarkdownEngine
     weak var codeLanguagePicker: CodeLanguagePicker?
     private var codeLanguagePickerOffset: Int?
 
+    func codeBlockFrame(at offset: Int) -> CodeBlockTextBlock? {
+        guard let storage = textStorage, offset >= 0, offset < storage.length,
+              let paragraph = storage.attribute(.paragraphStyle, at: offset, effectiveRange: nil) as? NSParagraphStyle else { return nil }
+        return paragraph.textBlocks.compactMap { $0 as? CodeBlockTextBlock }.first
+    }
+
+    func keepCodeLanguagePicker(for selection: NSRange) -> Bool {
+        guard let offset = codeLanguagePickerOffset, let block = codeBlockFrame(at: offset),
+              codeBlockFrame(at: selection.location) === block,
+              codeBlockFrame(at: max(selection.location, NSMaxRange(selection) - 1)) === block else { return false }
+        return true
+    }
+
     override public func layout() {
         super.layout()
         positionCodeLanguagePicker(at: codeLanguagePickerOffset)
@@ -30,15 +43,18 @@ import MarkdownEngine
     func positionCodeLanguagePicker(at offset: Int?) {
         codeLanguagePickerOffset = offset
         guard let picker = codeLanguagePicker else { return }
-        guard let offset, let storage = textStorage, offset < storage.length,
-              let paragraph = storage.attribute(.paragraphStyle, at: offset, effectiveRange: nil) as? NSParagraphStyle,
-              let block = paragraph.textBlocks.compactMap({ $0 as? CodeBlockTextBlock }).first,
+          guard let offset, let block = codeBlockFrame(at: offset),
               let layout = layoutManager else { picker.isHidden = true; return }
         layout.ensureLayout(forCharacterRange: NSRange(location: offset, length: 1))
         let glyph = layout.glyphIndexForCharacter(at: offset)
         let origin = textContainerOrigin
-        let frame = block.backgroundRect(for: layout.boundsRect(for: block, at: glyph, effectiveRange: nil))
-            .offsetBy(dx: origin.x, dy: origin.y)
+        var blockBounds = layout.boundsRect(for: block, at: glyph, effectiveRange: nil)
+        if blockBounds.width <= 0, let container = textContainer {
+            layout.ensureLayout(for: container)
+            blockBounds = layout.boundsRect(for: block, at: glyph, effectiveRange: nil)
+            if blockBounds.width <= 0, !picker.isHidden { return }
+        }
+        let frame = block.backgroundRect(for: blockBounds).offsetBy(dx: origin.x, dy: origin.y)
         let right = min(frame.maxX, bounds.maxX)
         let width = min(max(112, picker.intrinsicContentSize.width), 220, right - frame.minX)
         let bottom = frame.minY - CodeBlockTextBlock.languagePickerGap

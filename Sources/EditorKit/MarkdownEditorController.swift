@@ -74,6 +74,12 @@ import AppKit
     private var codeHighlightRevision: UInt64 = 0
     private var scheduledHighlightSource: String?
     private var hasCodeColors = false
+    private struct ColoredBlock: Hashable {
+        let language: CodeLanguage
+        let text: Data
+    }
+    private var blockColors: [ColoredBlock: [CodeHighlight]] = [:]
+    private var pendingCodeColorEdit: (text: String, range: NSRange, language: String, colors: [CodeHighlight])?
     private var imagesChanged = true
     private var applyingNativeEdit = false
     private var refreshing = false
@@ -243,7 +249,14 @@ import AppKit
 
     private func updateCodeLanguagePicker() {
         guard isViewLoaded else { return }
-        guard canEdit, let block = currentCodeBlock, let labels = codeLanguagePickerLabels?() else {
+        guard canEdit, mode == .richText, !textView.isComposing, !textView.hasMarkedText(),
+              let labels = codeLanguagePickerLabels?() else {
+            textView.positionCodeLanguagePicker(at: nil)
+            return
+        }
+        guard let block = currentCodeBlock else {
+            if displayedSource == session.source, session.renderSnapshot?.source != session.source,
+               textView.keepCodeLanguagePicker(for: textView.selectedRange()) { return }
             textView.positionCodeLanguagePicker(at: nil)
             return
         }
@@ -549,16 +562,32 @@ import AppKit
         let insertingInsideListMarker = mode == .richText && affectedCharRange.length == 0 && !replacementString.isEmpty && map?.segments.contains(where: {
             $0.isListMarker && NSLocationInRange(affectedCharRange.location, $0.displayedNSRange)
         }) == true
-                let insertingWhitespace = mode == .richText && !replacementString.isEmpty
-                        && replacementString.allSatisfy { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\r\n" }
+        let fencedFrame = mode == .richText ? self.textView.codeBlockFrame(at: editingRange.location) : nil
+        let insertingWhitespace = mode == .richText && !replacementString.isEmpty
+            && replacementString.allSatisfy { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\r\n" }
+        let editsCodeInPlace = fencedFrame != nil && patches.count == 1
+            && patches[0].range == sourceRange && patches[0].replacement == replacementString
+            && !insertingWhitespace && !replacementString.contains(where: \.isNewline)
+            && session.renderSnapshot?.codeBlocks.contains(where: {
+                $0.closingFenceEnd != nil && self.textView.codeBlockFrame(at: $0.range.location) === fencedFrame
+            }) == true
+            && map?.segments.contains(where: {
+                $0.kind == .code && NSLocationInRange(editingRange.location, $0.displayedNSRange)
+                    && NSMaxRange(editingRange) <= NSMaxRange($0.displayedNSRange)
+                    && !(textView.string as NSString).substring(with: $0.displayedNSRange).contains(where: \.isNewline)
+            }) == true
+        let colorEdit = !editsCodeInPlace && patches.count == 1 && patches[0].replacement == replacementString
+            ? codeColorEdit(in: editingRange, replacement: replacementString) : nil
         applyingNativeEdit = true
         let accepted = session.apply(patches)
         applyingNativeEdit = false
+        pendingCodeColorEdit = accepted ? colorEdit : nil
+        defer { pendingCodeColorEdit = nil }
         if accepted, deletingHorizontalRule || deletingListMarker || insertingInsideListMarker || insertingWhitespace {
             session.renderNow()
             return false
         }
-        if accepted, mode == .richText, let sourceRange,
+        if accepted, mode == .richText, !editsCodeInPlace, let sourceRange,
            patches.first?.replacement != SourceMap.escapeText(replacementString)
             || patches.contains(where: { $0.range.length > 0 && NSIntersectionRange($0.range, sourceRange).length != $0.range.length }) {
             session.renderNow()
@@ -693,6 +722,7 @@ import AppKit
         }
         if mode == .source {
             clearCodeHighlights()
+            blockColors.removeAll()
             if displayedSource != session.source || displayedMode != .source {
                 textView.textStorage?.setAttributedString(NSAttributedString(string: session.source, attributes: [.font: NSFont.monospacedSystemFont(ofSize: Typography.source, weight: .regular), .foregroundColor: NSColor.textColor]))
             }
@@ -708,6 +738,7 @@ import AppKit
                     || (!applyRenderedAttributes(result.attributedString) && !applyCheckboxUpdate(result.attributedString)) {
                     clearCodeHighlights()
                     textView.textStorage?.setAttributedString(result.attributedString)
+                    restoreCodeHighlights(in: snapshot)
                 }
                 map = result.sourceMap
                 renderedSnapshotSource = snapshot.source
@@ -765,7 +796,11 @@ import AppKit
     }
 
     private func scheduleCodeHighlights(_ snapshot: RenderSnapshot) {
-        guard !snapshot.codeBlocks.isEmpty else { clearCodeHighlights(); return }
+        guard !snapshot.codeBlocks.isEmpty else {
+            clearCodeHighlights()
+            blockColors.removeAll()
+            return
+        }
         guard scheduledHighlightSource != snapshot.source else { return }
         invalidateCodeHighlightTask()
         scheduledHighlightSource = snapshot.source
@@ -782,7 +817,59 @@ import AppKit
             guard self.mode == .richText, self.session.source == snapshot.source,
                   self.renderedSnapshotSource == snapshot.source else { return }
             self.applyCodeHighlights(highlights)
+            self.rememberCodeHighlights(highlights, in: snapshot)
         }
+    }
+
+    private func coloredBlock(_ block: CodeBlockSnapshot, in text: NSString) -> ColoredBlock? {
+        guard block.range.length <= CodeHighlighter.maximumBlockLength,
+              let language = CodeLanguage(label: block.language),
+              let bytes = text.substring(with: block.range).data(using: .utf16LittleEndian) else { return nil }
+          return ColoredBlock(language: language, text: bytes)
+    }
+
+    private func rememberCodeHighlights(_ highlights: [CodeHighlight], in snapshot: RenderSnapshot) {
+        blockColors.removeAll(keepingCapacity: true)
+        let text = snapshot.text as NSString
+        var index = 0
+        var remaining = CodeHighlighter.maximumCacheLength
+        for block in snapshot.codeBlocks {
+            let start = index
+            while index < highlights.count, highlights[index].range.location < NSMaxRange(block.range) { index += 1 }
+            guard index > start, block.range.length <= remaining,
+                let key = coloredBlock(block, in: text), blockColors[key] == nil else { continue }
+            remaining -= block.range.length
+            blockColors[key] = highlights[start..<index].map { $0.offset(by: -block.range.location) }
+        }
+    }
+
+    private func restoreCodeHighlights(in snapshot: RenderSnapshot) {
+        guard !blockColors.isEmpty || pendingCodeColorEdit != nil else { return }
+        let text = snapshot.text as NSString
+        let highlights = snapshot.codeBlocks.flatMap { block -> [CodeHighlight] in
+            if let edit = pendingCodeColorEdit, block.range == edit.range, block.language == edit.language,
+               text.substring(with: block.range).utf16.elementsEqual(edit.text.utf16) { return edit.colors }
+            guard let key = coloredBlock(block, in: text), let colors = blockColors[key] else { return [] }
+            return colors.map { $0.offset(by: block.range.location) }
+        }
+        applyCodeHighlights(highlights)
+    }
+
+    private func codeColorEdit(in range: NSRange, replacement: String)
+        -> (text: String, range: NSRange, language: String, colors: [CodeHighlight])? {
+        guard hasCodeColors, let block = currentCodeBlock, block.range.length <= CodeHighlighter.maximumBlockLength,
+              range.location >= block.range.location, NSMaxRange(range) <= NSMaxRange(block.range),
+              let key = coloredBlock(block, in: textView.string as NSString), let colors = blockColors[key] else { return nil }
+        let local = NSRange(location: range.location - block.range.location, length: range.length)
+        let delta = replacement.utf16.count - range.length
+        let text = (textView.string as NSString).substring(with: block.range) as NSString
+        let updated = colors.compactMap { color -> CodeHighlight? in
+            if NSMaxRange(color.range) <= local.location { return color.offset(by: block.range.location) }
+            if color.range.location >= NSMaxRange(local) { return color.offset(by: block.range.location + delta) }
+            return nil
+        }
+        return (text.replacingCharacters(in: local, with: replacement),
+                NSRange(location: block.range.location, length: block.range.length + delta), block.language, updated)
     }
 
     private func applyCodeHighlights(_ highlights: [CodeHighlight]) {

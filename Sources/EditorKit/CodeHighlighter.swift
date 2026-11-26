@@ -129,6 +129,9 @@ enum CodeLanguage: String, CaseIterable, Sendable {
 }
 
 struct CodeHighlight: Equatable, Sendable {
+    func offset(by delta: Int) -> CodeHighlight {
+        CodeHighlight(range: NSRange(location: range.location + delta, length: range.length), kind: kind)
+    }
     enum Kind: String, Sendable {
         case keyword, string, comment, number, type, function, property, constant, operatorSymbol, tag
 
@@ -150,7 +153,7 @@ struct CodeHighlight: Equatable, Sendable {
 
 actor CodeHighlighter {
     static let maximumBlockLength = 64 * 1024
-    private static let maximumCacheLength = 256 * 1024
+    static let maximumCacheLength = 256 * 1024
     private static let kindKey = NSAttributedString.Key("CodeHighlightKind")
 
     private struct Grammar {
@@ -193,9 +196,7 @@ actor CodeHighlighter {
                 nextCache[key] = entry
                 nextBlocks[index] = key
             }
-            result.append(contentsOf: entry.highlights.map {
-                CodeHighlight(range: NSRange(location: $0.range.location + block.range.location, length: $0.range.length), kind: $0.kind)
-            })
+            result.append(contentsOf: entry.highlights.map { $0.offset(by: block.range.location) })
         }
         guard !Task.isCancelled else { return [] }
         cache = nextCache

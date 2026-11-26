@@ -413,6 +413,74 @@ import Testing
         #expect(highlights.contains { $0.kind == .number && text.substring(with: $0.range) == "42" })
     }
 
+    @MainActor @Test func unchangedCodeKeepsItsColorsDuringRichTextReplacement() async throws {
+        let source = "Before\n\n```swift\nlet first = 42\n```\n\n```swift\nlet second = 1\n```"
+        let session = DocumentSession(source: source)
+        let editor = MarkdownEditorController(session: session)
+        _ = editor.view
+        session.renderNow()
+        await editor.waitForCodeHighlights()
+        let layout = try #require(editor.textView.layoutManager)
+        func color(at text: String) -> NSColor? {
+            let range = (editor.textView.string as NSString).range(of: text)
+            guard range.location != NSNotFound else { return nil }
+            return layout.temporaryAttribute(.foregroundColor, atCharacterIndex: range.location, effectiveRange: nil) as? NSColor
+        }
+        #expect(color(at: "let first") == .systemPurple)
+        let editedCode = (session.source as NSString).range(of: "let second")
+        #expect(editor.insertMarkdown("var second", in: editedCode))
+        session.renderNow()
+        #expect(color(at: "let first") == .systemPurple)
+        #expect(color(at: "var second") == nil)
+        await editor.waitForCodeHighlights()
+        #expect(color(at: "var second") == .systemPurple)
+
+        let firstCode = (session.source as NSString).range(of: "let first")
+        #expect(editor.insertMarkdown("let longerName", in: firstCode))
+        session.renderNow()
+        #expect(color(at: "var second") == .systemPurple)
+    }
+
+    @MainActor @Test func editingCodeKeepsColorsAndPickerWhileSnapshotIsStale() async throws {
+        let source = "Before\n\n```dockerfile\nFROM python:3.12-slim\nRUN echo hello\n```\n\nAfter"
+        let session = DocumentSession(source: source)
+        let editor = MarkdownEditorController(session: session)
+        editor.codeLanguagePickerLabels = { ("Code Block Language", "No Language") }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = editor.view
+        session.renderNow()
+        await editor.waitForCodeHighlights()
+        let view = try #require(editor.textView)
+        let layout = try #require(view.layoutManager)
+        let from = (view.string as NSString).range(of: "FROM").location
+        let hello = (view.string as NSString).range(of: "hello").location
+        let caret = NSRange(location: hello + 1, length: 0)
+        view.setSelectedRange(caret)
+        #expect(!editor.codeLanguagePicker.isHidden)
+        for input in ["x", "-"] {
+            view.insertText(input, replacementRange: view.selectedRange())
+            editor.textViewDidChangeSelection(Notification(name: NSTextView.didChangeSelectionNotification, object: view))
+            #expect(session.renderSnapshot?.source == source)
+            #expect(!editor.codeLanguagePicker.isHidden)
+            #expect(layout.temporaryAttribute(.foregroundColor, atCharacterIndex: from, effectiveRange: nil) as? NSColor == .systemPurple)
+        }
+        #expect(session.source.contains("hx-ello"))
+        #expect(session.selectedSourceRange.location == (session.source as NSString).range(of: "hx-").location + 3)
+        session.renderNow()
+        #expect(editor.currentCodeBlock != nil)
+        #expect(view.selectedRange().location == (view.string as NSString).range(of: "hx-").location + 3)
+        #expect(!editor.codeLanguagePicker.isHidden)
+        #expect(layout.temporaryAttribute(.foregroundColor, atCharacterIndex: from, effectiveRange: nil) as? NSColor == .systemPurple)
+        await editor.waitForCodeHighlights()
+        for input in [" ", "\n"] {
+            view.insertText(input, replacementRange: view.selectedRange())
+            #expect(!editor.codeLanguagePicker.isHidden)
+            #expect(layout.temporaryAttribute(.foregroundColor, atCharacterIndex: from, effectiveRange: nil) as? NSColor == .systemPurple)
+            await editor.waitForCodeHighlights()
+        }
+        #expect(session.source.contains("hx- \nello"))
+    }
+
     @MainActor @Test func editorColorsAreTemporaryAndRichTextOnly() async throws {
         let source = "Before 📝\n\n```swift\nlet value = 42\n```\n\nAfter"
         let session = DocumentSession(source: source)
