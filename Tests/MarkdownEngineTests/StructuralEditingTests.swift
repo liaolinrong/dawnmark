@@ -3,6 +3,60 @@ import Testing
 import MarkdownEngine
 import EditorKit
 
+@MainActor @Test(arguments: ["```", "``````", "~~~"])
+func backspaceAcrossWholeCodeBlockRemovesHiddenFences(fence: String) throws {
+    let prefix = "```sql\nSELECT 1;\n```\n"
+    let source = prefix + "表格插入\n\(fence)go\nimport \"fmt\"\n\nfunc main() {}\n\(fence)\n\n\nAfter"
+    let session = DocumentSession(source: source)
+    let controller = MarkdownEditorController(session: session)
+    _ = controller.view
+    session.renderNow()
+    let editor = controller.textView!
+    let displayed = editor.string as NSString
+    let start = displayed.range(of: "表格插入")
+    let body = displayed.range(of: "import \"fmt\"")
+    let end = displayed.range(of: "After")
+    try #require([start, body, end].allSatisfy { $0.location != NSNotFound })
+
+    editor.setSelectedRange(NSRange(location: body.location, length: 6))
+    editor.deleteBackward(nil)
+    session.renderNow()
+    #expect(session.source == source.replacingOccurrences(of: "import ", with: " "))
+    #expect(session.renderSnapshot?.codeBlocks.map(\.language) == ["sql", "go"])
+    session.undoManager.undo()
+    session.renderNow()
+    try #require(session.source == source)
+
+    editor.setSelectedRange(NSRange(location: start.location, length: end.location - start.location - 1))
+    editor.deleteBackward(nil)
+    session.renderNow()
+    #expect(session.source == prefix + "\nAfter")
+    #expect(session.renderSnapshot?.codeBlocks.map(\.language) == ["sql"])
+    session.undoManager.undo()
+    #expect(session.source == source)
+}
+
+@MainActor @Test(arguments: ["\n", "\r\n"], ["```go\n```\n\nAfter", "After"])
+func backspaceAfterClosingFenceKeepsFollowingLineSeparate(newline: String, following: String) throws {
+    let prefix = ["```sql", "LIMIT 0, 2;", "", "```", ""].joined(separator: newline)
+    let suffix = following.replacingOccurrences(of: "\n", with: newline)
+    for blank in ["", newline] {
+        let session = DocumentSession(source: prefix + blank + suffix)
+        let controller = MarkdownEditorController(session: session)
+        _ = controller.view
+        session.renderNow()
+        let editor = controller.textView!
+        let block = try #require(session.renderSnapshot?.codeBlocks.first)
+        let boundary = NSMaxRange(block.range)
+        editor.setSelectedRange(NSRange(location: boundary + 1, length: 0))
+        editor.deleteBackward(nil)
+        session.renderNow()
+        #expect(session.source == prefix + suffix)
+        #expect(session.renderSnapshot?.codeBlocks.map(\.language) == (following.hasPrefix("```") ? ["sql", "go"] : ["sql"]))
+        if blank.isEmpty { #expect(editor.selectedRange() == NSRange(location: boundary, length: 0)) }
+    }
+}
+
 @MainActor @Test(arguments: ["", "\n\nAfter", "\r\n\r\nAfter"])
 func backspaceAtCodeBlockBoundaryKeepsTrailingBlankLine(suffix: String) throws {
     let newline = suffix.hasPrefix("\r\n") ? "\r\n" : "\n"

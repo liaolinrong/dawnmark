@@ -779,6 +779,7 @@ private struct RenderVisitor: MarkupVisitor {
         }
         style = saved
         if fenced {
+            recordContainer(node, start: start)
             let line = original.substring(with: firstLine)
             let indent = line.prefix { $0 == " " || $0 == "\t" }
             let fence = line.dropFirst(indent.count).prefix { $0 == opening.first }

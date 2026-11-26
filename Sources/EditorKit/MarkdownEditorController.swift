@@ -505,6 +505,22 @@ import AppKit
             patches = result
         }
         if replacementString.isEmpty {
+            if mode == .richText, editingRange.length == 1,
+               textView.selectedRange() == NSRange(location: NSMaxRange(editingRange), length: 0),
+               let snapshot = session.renderSnapshot, snapshot.source == session.source,
+               let block = snapshot.codeBlocks.first(where: { NSMaxRange($0.range) == editingRange.location }),
+               let fenceEnd = block.closingFenceEnd, patches.count == 1,
+               patches[0].range.location == fenceEnd {
+                let source = session.source as NSString
+                let removed = source.substring(with: patches[0].range)
+                let next = NSMaxRange(patches[0].range)
+                if ["\n", "\r\n", "\r"].contains(removed), next < source.length,
+                   source.character(at: next) != 10, source.character(at: next) != 13 {
+                    textView.setSelectedRange(NSRange(location: editingRange.location, length: 0))
+                    session.selectedSourceRange = selectedSourceRange()
+                    return false
+                }
+            }
             switch ruleBoundary(deleting: editingRange, patches: patches) {
             case .unaffected: break
             case .converted(let converted):
