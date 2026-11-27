@@ -2,6 +2,20 @@ import Foundation
 import Testing
 @testable import DawnMarkSupport
 
+@Test func readOnlyIndicatorIsStandaloneInEveryLanguage() {
+    let expected: [AppLanguage: String] = [
+        .english: "Read-only", .simplifiedChinese: "只读", .traditionalChinese: "唯讀",
+        .japanese: "読み出し専用", .korean: "읽기 전용", .french: "Lecture seule",
+        .german: "Nur Lesen", .spanish: "Solo lectura", .italian: "Sola lettura",
+        .dutch: "Alleen-lezen", .polish: "Tylko do odczytu", .turkish: "Salt okunur",
+        .brazilianPortuguese: "Somente leitura", .portuguese: "Só de leitura", .indonesian: "Hanya baca"
+    ]
+    #expect(Set(expected.keys) == Set(AppLanguage.allCases))
+    for language in AppLanguage.allCases {
+        #expect(L10n.text(.readonly, language: language) == expected[language])
+    }
+}
+
 @Test func visualEditingNamesAreLocalizedAndHelpUsesUpdatedTerminology() {
     let expected: [AppLanguage: String] = [
         .english: "Visual Editing", .simplifiedChinese: "可视化编辑", .traditionalChinese: "視覺化編輯",

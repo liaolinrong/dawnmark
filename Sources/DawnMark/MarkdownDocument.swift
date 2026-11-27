@@ -7,10 +7,10 @@ import ImageIO
 
 @MainActor final class MarkdownDocument: NSDocument, NSWindowDelegate, NSToolbarDelegate, NSToolbarItemValidation {
     private static let horizontalRuleItem = NSToolbarItem.Identifier("DawnMark.InsertHorizontalRule")
+    private static let readOnlyItem = NSToolbarItem.Identifier("DawnMark.ReadOnly")
     let session: DocumentSession
     let commerce: CommerceController
     let editor: MarkdownEditorController
-    private let status = NSTextField(labelWithString: "")
     private var scopes: [URL] = []
     private let cachedImages = NSCache<NSString, NSImage>()
     private var displayedImages: [String: WeakImage] = [:]
@@ -32,9 +32,7 @@ import ImageIO
         editor.mode = UserDefaults.standard.string(forKey: "defaultMode") == "source" ? .source : .richText
         editor.canEdit = commerce.canEdit
         editor.sourceUpdated = { [weak self] _ in
-            guard let self else { return }
-            self.updateChangeCount(.changeDone)
-            self.updateStatus()
+            self?.updateChangeCount(.changeDone)
         }
         editor.imageProvider = { [weak self] path in self?.image(path: path) }
         editor.onImportImages = { [weak self] urls, data in self?.importImages(urls: urls, data: data) }
@@ -48,22 +46,7 @@ import ImageIO
         window.minSize = NSSize(width: 480, height: 320)
         window.center()
         window.delegate = self
-        let root = NSView()
-        let editorView = editor.view
-        editorView.translatesAutoresizingMaskIntoConstraints = false
-        status.translatesAutoresizingMaskIntoConstraints = false
-        status.font = NSFont.systemFont(ofSize: 12)
-        status.textColor = .secondaryLabelColor
-        status.lineBreakMode = .byTruncatingMiddle
-        root.addSubview(editorView)
-        root.addSubview(status)
-        NSLayoutConstraint.activate([
-            editorView.leadingAnchor.constraint(equalTo: root.leadingAnchor), editorView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            editorView.topAnchor.constraint(equalTo: root.topAnchor), editorView.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -4),
-            status.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16), status.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-            status.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -6), status.heightAnchor.constraint(equalToConstant: 16)
-        ])
-        window.contentView = root
+        window.contentView = editor.view
         let toolbar = NSToolbar(identifier: "DawnMark.Editor")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
@@ -72,12 +55,12 @@ import ImageIO
         let controller = NSWindowController(window: window)
         addWindowController(controller)
         applyPreferences()
-        updateStatus()
+        updateReadOnlyIndicator()
         window.makeFirstResponder(editor.textView)
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.horizontalRuleItem]
+        [.flexibleSpace, Self.horizontalRuleItem, Self.readOnlyItem]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -85,6 +68,19 @@ import ImageIO
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if itemIdentifier == Self.readOnlyItem {
+            let title = L10n.text(.readonly)
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
+            label.textColor = .secondaryLabelColor
+            label.sizeToFit()
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = title
+            item.view = label
+            item.autovalidates = false
+            item.visibilityPriority = .user
+            return item
+        }
         guard itemIdentifier == Self.horizontalRuleItem else { return nil }
         let item = NSToolbarItem(itemIdentifier: itemIdentifier)
         item.label = L10n.text(.rule)
@@ -112,7 +108,6 @@ import ImageIO
         try Data(snapshot.utf8).write(to: url, options: .atomic)
         onMain {
             self.savedSource = snapshot
-            self.updateStatus()
         }
     }
 
@@ -136,7 +131,7 @@ import ImageIO
 
     func updateAccess() {
         editor.canEdit = commerce.canEdit
-        updateStatus()
+        updateReadOnlyIndicator()
     }
 
     func updateOutlineLocalization() {
@@ -146,11 +141,20 @@ import ImageIO
 
     func applyPreferences() {
         editor.textView?.isContinuousSpellCheckingEnabled = UserDefaults.standard.bool(forKey: "spellcheck")
-        updateStatus()
     }
 
-    func updateStatus() {
-        status.stringValue = L10n.format(.documentStatus, fileURL?.lastPathComponent ?? "DawnMark", commerce.canEdit ? (session.source == savedSource ? "" : L10n.text(.edited)) : L10n.text(.readonly))
+    func updateReadOnlyIndicator() {
+        let isReadOnly = !editor.canEdit
+        for controller in windowControllers {
+            guard let toolbar = controller.window?.toolbar else { continue }
+            if let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.readOnlyItem }) {
+                if isReadOnly, toolbar.items[index].label == L10n.text(.readonly) { continue }
+                toolbar.removeItem(at: index)
+            }
+            if isReadOnly {
+                toolbar.insertItem(withItemIdentifier: Self.readOnlyItem, at: toolbar.items.count)
+            }
+        }
     }
 
     func retainAccess(to url: URL) {

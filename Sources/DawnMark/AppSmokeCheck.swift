@@ -36,7 +36,7 @@ import EditorKit
             defer { try? FileManager.default.removeItem(at: root) }
             try checkLinkActions(in: root)
             try checkTableActions(in: root)
-            let location = try DocumentStore().create(name: "DawnMark", in: root)
+            let location = try DocumentStore().create(name: "DawnMark Notes with a Long Document Title for Narrow Window Testing", in: root)
             let longCell = String(repeating: "Native editable Markdown tables wrap long content. ", count: 5)
             let source = "# DawnMark\n\nNative **Markdown** editing.\n\n## Editing\n\n### Inline formatting\n\n#### Nested sections with a longer heading\n\n##### Small sections\n\n###### Details\n\n## Tasks\n\n- [ ] Task\n\n## Table\n\n| ID | Description | Status |\n| --- | --- | --- |\n| 1 | \(longCell) | OK |\n| 2 | Short | Ready |\n\n## Code\n\n```swift\nlet editor = true\n```\n"
             try DocumentStore().save(source, to: location)
@@ -75,10 +75,15 @@ import EditorKit
             }
             precondition(formatItems[7].keyEquivalent == "b" && formatItems[8].keyEquivalent == "i")
             let documentWindow = document.windowControllers.first!.window!
-            let ruleItem = documentWindow.toolbar!.items.first { $0.itemIdentifier.rawValue == "DawnMark.InsertHorizontalRule" }!
+            let toolbar = documentWindow.toolbar!
+            let readOnlyItem = NSToolbarItem.Identifier("DawnMark.ReadOnly")
+            let ruleItem = toolbar.items.first { $0.itemIdentifier.rawValue == "DawnMark.InsertHorizontalRule" }!
+            precondition(toolbar.items.contains { $0.itemIdentifier == readOnlyItem })
             precondition(ruleItem.label == L10n.text(.rule) && ruleItem.toolTip == L10n.text(.rule))
             precondition(ruleItem.image != nil && !document.validateToolbarItem(ruleItem))
             document.editor.canEdit = true
+            document.updateReadOnlyIndicator()
+            precondition(!toolbar.items.contains { $0.itemIdentifier == readOnlyItem })
             precondition(document.validateToolbarItem(ruleItem))
             document.editor.textView.setSelectedRange(NSRange(location: document.editor.textView.string.utf16.count, length: 0))
             precondition(NSApp.sendAction(ruleItem.action!, to: ruleItem.target, from: ruleItem))
@@ -88,8 +93,10 @@ import EditorKit
             document.session.renderNow()
             precondition(document.session.source == source)
             document.updateChangeCount(.changeCleared)
-            document.editor.canEdit = false
+            document.updateAccess()
+            precondition(!document.editor.canEdit)
             let split = document.editor.view as! NSSplitView
+            precondition(documentWindow.contentView === split)
             let savedSource = document.session.source
             split.setPosition(260, ofDividerAt: 0)
             precondition(document.editor.outlineSidebar.frame.width == 260)
@@ -119,6 +126,10 @@ import EditorKit
                     scroll.reflectScrolledClipView(scroll.contentView)
                 }
                 documentWindow.displayIfNeeded()
+                let indicator = toolbar.visibleItems?.first { $0.itemIdentifier == readOnlyItem }
+                let label = indicator?.view as? NSTextField
+                precondition(label?.stringValue == L10n.text(.readonly) && label?.window === documentWindow)
+                precondition(label!.frame.width >= label!.intrinsicContentSize.width)
                 precondition(document.editor.outlineSidebar.frame.width == 200)
                 let outlineLabel = document.editor.outlineSidebar.subviews.compactMap { $0 as? NSTextField }.first!
                 precondition(!outlineLabel.stringValue.isEmpty && outlineLabel.frame.width > 0 && outlineLabel.frame.height > 0)

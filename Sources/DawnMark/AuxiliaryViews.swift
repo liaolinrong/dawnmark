@@ -43,7 +43,7 @@ import DawnMarkSupport
         AppLanguage.syncSystemInterfaceLanguage(preference: UserDefaults.standard.string(forKey: "language") ?? "system")
         buildMenus()
         for document in NSDocumentController.shared.documents {
-            (document as? MarkdownDocument)?.updateStatus()
+            (document as? MarkdownDocument)?.updateReadOnlyIndicator()
             (document as? MarkdownDocument)?.updateOutlineLocalization()
         }
         let visible = Set(auxiliaryWindows.compactMap { $0.value.window?.isVisible == true ? $0.key : nil })
