@@ -220,7 +220,9 @@ public enum MarkdownRenderer {
             attributes[.paragraphStyle] = paragraph
             if run.style.contains(.strike) { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             if run.style.contains(.code), !run.style.contains(.codeBlock) { attributes[.markdownInlineCode] = true }
-            if run.style.contains(.quote) { attributes[.foregroundColor] = NSColor.secondaryLabelColor }
+            if run.headingLevel == 6 || run.style.contains(.quote) {
+                attributes[.foregroundColor] = NSColor.secondaryLabelColor
+            }
             if run.style.contains(.horizontalRule) {
                 attributes[.markdownHorizontalRule] = true
                 attributes[.foregroundColor] = NSColor.clear

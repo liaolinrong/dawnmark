@@ -1826,16 +1826,18 @@ import EditorKit
             (34, 20, 10), (28, 16, 8), (24, 12, 6),
             (20, 10, 6), (18, 8, 4), (16, 6, 4)
         ]
-        let source = "\(String(repeating: "#", count: level)) Heading *emphasis* `code`\n\nBody"
+        let source = "\(String(repeating: "#", count: level)) Heading *emphasis* `code`\n\nBody **Bold**"
         let result = MarkdownRenderer.render(source: source)
         let expected = styles[level - 1]
-        #expect(result.attributedString.string == "Heading emphasis code\n\nBody")
+        #expect(result.attributedString.string == "Heading emphasis code\n\nBody Bold")
         for word in ["Heading", "emphasis", "code"] {
             let displayedRange = (result.attributedString.string as NSString).range(of: word)
             let font = try #require(result.attributedString.attribute(.font, at: displayedRange.location, effectiveRange: nil) as? NSFont)
             let paragraph = try #require(result.attributedString.attribute(.paragraphStyle, at: displayedRange.location, effectiveRange: nil) as? NSParagraphStyle)
             #expect(font.pointSize == expected.size)
             #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+            let color = result.attributedString.attribute(.foregroundColor, at: displayedRange.location, effectiveRange: nil) as? NSColor
+            #expect(color == (level == 6 ? NSColor.secondaryLabelColor : NSColor.textColor))
             #expect(paragraph.paragraphSpacingBefore == expected.before)
             #expect(paragraph.paragraphSpacing == expected.after)
             #expect((result.attributedString.attribute(.markdownHeadingSeparator, at: displayedRange.location, effectiveRange: nil) != nil) == (level <= 2))
@@ -1848,6 +1850,9 @@ import EditorKit
         #expect(!NSFontManager.shared.traits(of: bodyFont).contains(.boldFontMask))
         #expect(bodyParagraph.paragraphSpacingBefore == 0)
         #expect(bodyParagraph.paragraphSpacing == 6)
+        let boldRange = (result.attributedString.string as NSString).range(of: "Bold")
+        let boldColor = result.attributedString.attribute(.foregroundColor, at: boldRange.location, effectiveRange: nil) as? NSColor
+        #expect(boldColor == .textColor)
     }
 
     @Test func existingPipesSupportRapidDeletionAndUndo() {
